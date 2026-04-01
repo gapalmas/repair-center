@@ -1,0 +1,231 @@
+@startuml flujo_reparacion
+!theme plain
+title Flujo de Reparación — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+start
+
+:Orden en estado: **EN_REPARACIÓN**\n(cliente aprobó cotización — proviene del flujo de diagnóstico);
+
+' ─── INICIO DE TRABAJO ────────────────────────────────────────
+
+partition "Inicio de Trabajo" {
+
+  :Técnico registra inicio de reparación\n• Fecha y hora de inicio (timestamp)\n• Técnico responsable confirmado;
+
+  note right
+    El registro de tiempo permite
+    comparar costo estimado vs real
+    y mejorar futuras cotizaciones.
+  end note
+
+  :Notificar al cliente\n"¡Comenzamos! Tu dispositivo está\nen proceso de reparación.\nTe avisamos cuando esté listo.";
+}
+
+' ─── GESTIÓN DE REPUESTOS ─────────────────────────────────────
+
+partition "Gestión de Repuestos" {
+
+  if (¿La reparación\nrequiere repuestos?) then (Sí)
+
+    if (¿Repuestos disponibles\nen stock propio?) then (Sí)
+
+      :Descontar repuesto(s) del inventario\nRegistrar: código, cantidad, costo real;
+
+    else (No)
+
+      :Actualizar estado de orden\n**EN_REPARACIÓN → ESPERANDO_REPUESTOS**;
+
+      :Notificar al cliente\n"Tu reparación requiere un repuesto\nque estamos gestionando con el proveedor.\nTiempo estimado de llegada: [X días].";
+
+      :Solicitar repuesto al proveedor\nRegistrar: proveedor, fecha de pedido,\nfecha estimada de llegada, costo;
+
+      note right
+        El reloj de custodia
+        se pausa mientras
+        la orden esté en
+        ESPERANDO_REPUESTOS.
+      end note
+
+      :Repuesto llega al taller\nRegistrar fecha real de recepción;
+      :Descontar repuesto del inventario\nActualizar estado\n**ESPERANDO_REPUESTOS → EN_REPARACIÓN**;
+      :Notificar al cliente\n"El repuesto llegó. Retomamos\ntu reparación de inmediato.";
+
+    endif
+
+  else (No requiere\nrepuestos)
+    :Continuar con reparación\npor mano de obra únicamente;
+  endif
+
+}
+
+' ─── EJECUCIÓN DE LA REPARACIÓN ───────────────────────────────
+
+partition "Ejecución Técnica" {
+
+  :Técnico ejecuta la reparación;
+
+  :Registrar bitácora de trabajo\n• Pasos realizados\n• Componentes reemplazados o intervenidos\n• Herramientas o técnicas utilizadas\n• Observaciones relevantes;
+
+  note right
+    La bitácora es el historial
+    técnico del dispositivo.
+    Sirve para garantías,
+    reincidencias y auditorías.
+  end note
+
+  ' ─── FALLAS ADICIONALES ─────────────────────────────────────
+
+  if (¿Se descubren fallas adicionales\nno contempladas en la cotización\noriginal?) then (Sí)
+
+    :Pausar la reparación;
+    :Documentar falla adicional\n(descripción, componente afectado,\ncosto estimado del adicional);
+    :Actualizar estado de orden\n**EN_REPARACIÓN → PAUSA_FALLA_ADICIONAL**;
+
+    :Notificar al cliente\n"Durante la reparación encontramos\nuna falla adicional: [descripción].\nCosto adicional estimado: $[monto].\n¿Deseas que procedamos?";
+
+    if (¿Cliente aprueba\nel costo adicional?) then (Aprueba)
+
+      :Registrar aprobación del adicional\n(fecha, hora, canal de respuesta);
+      :Actualizar estado\n**PAUSA_FALLA_ADICIONAL → EN_REPARACIÓN**;
+      :Continuar reparación\nincorporando el trabajo adicional;
+
+    else (No aprueba)
+
+      :Registrar rechazo del adicional;
+      :Documentar que la reparación\nse completará de forma parcial\n(solo lo originalmente cotizado);
+
+      note right
+        La entrega parcial queda
+        documentada y el cliente
+        firma conformidad de haber
+        sido informado de la falla
+        pendiente al momento de retirar.
+      end note
+
+      :Actualizar estado\n**PAUSA_FALLA_ADICIONAL → EN_REPARACIÓN**;
+      :Continuar y finalizar\nsolo la reparación original;
+
+    endif
+
+  else (No hay\nfallas adicionales)
+    :Continuar reparación\nsin interrupciones;
+  endif
+
+}
+
+' ─── VERIFICACIÓN Y PRUEBAS ───────────────────────────────────
+
+partition "Pruebas de Verificación Funcional" {
+
+  :Técnico registra fin de intervención\n(timestamp de fin de trabajo);
+
+  :Ejecutar pruebas de verificación funcional\n• Verificar que la falla reportada fue resuelta\n• Verificar funcionalidades básicas del dispositivo\n• Verificar que los accesorios entregados siguen presentes;
+
+  if (¿El dispositivo pasa\nlas pruebas?) then (Pasa) 
+
+    :Registrar resultado de pruebas: **APROBADO**\nCon observaciones del técnico;
+
+    :Calcular tiempo total de trabajo\n(fin − inicio, excluyendo pausas);
+
+    :Actualizar estado de orden\n**EN_REPARACIÓN → LISTO_PARA_ENTREGA**;
+
+    :Notificar al cliente\n"¡Tu dispositivo está listo!\nPuedes pasar a retirarlo cuando gustes.\nRecuerda traer tu comprobante (ticket: [código]).";
+
+    note right
+      A partir de este momento
+      inicia el reloj de custodia
+      del flujo de Custodia y
+      Salida del Dispositivo.
+    end note
+
+    stop
+
+  else (Falla en pruebas)
+
+    :Registrar resultado de pruebas: **FALLIDO**\nDescribir qué falló en la verificación;
+
+    if (¿Es viable un\nreintento de reparación?) then (Sí, reintento viable)
+
+      :Registrar reintento en bitácora\n(número de intento, descripción del ajuste);
+
+      note right
+        Máximo de reintentos
+        configurable por política
+        del negocio (recomendado: 2).
+        Cada reintento queda
+        documentado.
+      end note
+
+      :Volver a ejecutar intervención\ntécnica sobre el punto fallido;
+
+      ' Re-entra a pruebas (simplificado para evitar loop infinito en el diagrama)
+      :Repetir pruebas de verificación;
+
+      if (¿Pasa en el reintento?) then (Pasa)
+        :Registrar resultado: **APROBADO EN REINTENTO**;
+        :Actualizar estado de orden\n**EN_REPARACIÓN → LISTO_PARA_ENTREGA**;
+        :Notificar al cliente\n"¡Tu dispositivo está listo para retirar!";
+        stop
+      else (Falla nuevamente)
+        :Escalar a técnico senior\no especialista externo;
+      endif
+
+    else (No, reintento no viable)
+      :Escalar a técnico senior\no especialista externo;
+    endif
+
+    ' ─── INCIDENTE / ESCALAMIENTO ────────────────────────────
+
+    partition "Escalamiento e Incidente" {
+
+      :Registrar incidente técnico\n• Descripción del problema sin resolver\n• Acciones tomadas hasta ahora\n• Técnico que escala y técnico receptor;
+
+      if (¿El nuevo técnico\npuede resolver la falla?) then (Sí)
+
+        :Continuar reparación\nbajo nuevo responsable;
+        :Actualizar bitácora con\ncambio de técnico y motivo;
+
+        :Repetir pruebas de verificación;
+        if (¿Pasa pruebas?) then (Pasa)
+          :Actualizar estado\n**EN_REPARACIÓN → LISTO_PARA_ENTREGA**;
+          :Notificar al cliente\n"¡Tu dispositivo está listo para retirar!";
+          stop
+        else (Falla)
+          :Reparación fallida tras\nmúltiples intentos;
+        endif
+
+      else (No puede\nresolverse)
+        :Reparación fallida tras\nmúltiples intentos;
+      endif
+
+      :Documentar falla irresoluble\ncon todos los detalles técnicos;
+      :Actualizar estado de orden\n**EN_REPARACIÓN → REPARACION_FALLIDA**;
+
+      :Notificar al cliente con transparencia\n"Lamentamos informarte que tras múltiples\nintentos no pudimos resolver la falla.\nDetalle técnico: [descripción].\n\nNo se te cobrará la reparación.\nCoordina el retiro de tu dispositivo.";
+
+      note right
+        Si el negocio causó daño
+        adicional durante el intento,
+        debe documentarse aquí
+        y aplicar la política de
+        responsabilidad interna.
+      end note
+
+      stop
+
+    }
+
+  endif
+
+}
+
+@enduml

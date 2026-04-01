@@ -1,0 +1,154 @@
+@startuml entidades_recepcion
+!theme plain
+title Entidades — Módulo de Recepción
+
+skinparam ClassBackgroundColor #F0F4FF
+skinparam ClassBorderColor #3A5FCD
+skinparam ClassHeaderBackgroundColor #3A5FCD
+skinparam ClassHeaderFontColor #FFFFFF
+skinparam ClassFontSize 12
+skinparam ArrowColor #3A5FCD
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+' ─── Entidades principales ───
+
+class Cliente {
+  +id : int
+  +nombre : string
+  +telefono : string
+  +email : string
+  +fechaRegistro : datetime
+}
+
+class Dispositivo {
+  +id : int
+  +tipo : TipoDispositivo
+  +marca : string
+  +modelo : string
+  +color : string
+  +numeroSerie : string <<nullable>>
+}
+
+class Accesorio {
+  +id : int
+  +descripcion : string
+  +tipo : string
+}
+
+class CondicionFisica {
+  +id : int
+  +estadoPantalla : EstadoComponente
+  +estadoCarcasa : EstadoComponente
+  +estadoPuertos : EstadoComponente
+  +estadoBotones : EstadoComponente
+  +observaciones : string
+}
+
+class EvidenciaFotografica {
+  +id : int
+  +urlFoto : string
+  +fechaCaptura : datetime
+  +descripcion : string
+}
+
+class OrdenReparacion {
+  +id : int
+  +numeroTicket : string
+  +fechaIngreso : datetime
+  +fechaEstimadaEntrega : datetime <<nullable>>
+  +prioridad : Prioridad
+  +estado : EstadoOrden
+  +costoEstimado : decimal <<nullable>>
+}
+
+class FallaReportada {
+  +id : int
+  +descripcionCliente : string
+  +observacionTecnico : string <<nullable>>
+}
+
+class Notificacion {
+  +id : int
+  +canal : CanalNotificacion
+  +mensaje : string
+  +fechaEnvio : datetime
+  +estado : EstadoNotificacion
+}
+
+' ─── Enumeraciones ───
+
+enum TipoDispositivo {
+  CELULAR
+  COMPUTADORA
+  VIDEOJUEGO
+  CONSOLA
+  OTRO
+}
+
+enum EstadoComponente {
+  INTACTO
+  RAYADO
+  ROTO
+  MANCHAS
+  NO_APLICA
+}
+
+enum Prioridad {
+  NORMAL
+  URGENTE
+  EXPRESS
+}
+
+enum EstadoOrden {
+  RECIBIDO
+  EN_DIAGNOSTICO
+  EN_REPARACION
+  ESPERANDO_REPUESTOS
+  LISTO_PARA_ENTREGA
+  ENTREGADO
+  SIN_REPARACION
+}
+
+enum CanalNotificacion {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum EstadoNotificacion {
+  PENDIENTE
+  ENVIADA
+  FALLIDA
+}
+
+' ─── Relaciones ───
+
+Cliente        "1"  -->  "0..*"  OrdenReparacion       : genera >
+OrdenReparacion "1"  -->  "1"    Dispositivo            : contiene >
+OrdenReparacion "1"  -->  "1"    FallaReportada         : describe >
+OrdenReparacion "1"  -->  "0..*" Notificacion           : genera >
+Dispositivo    "1"  -->  "0..*"  Accesorio              : incluye >
+Dispositivo    "1"  -->  "1"    CondicionFisica         : documenta >
+Dispositivo    "1"  -->  "1..*"  EvidenciaFotografica   : evidencia >
+
+note bottom of CondicionFisica
+  Se evalúa en el momento
+  exacto de la recepción.
+  No puede modificarse
+  una vez generada la orden.
+end note
+
+note bottom of OrdenReparacion
+  numeroTicket es inmutable
+  una vez generado.
+  Formato: REP-YYYY-XXXX
+end note
+
+note right of EvidenciaFotografica
+  Mínimo 1 foto obligatoria.
+  Protege al negocio ante
+  disputas post-reparación.
+end note
+
+@enduml

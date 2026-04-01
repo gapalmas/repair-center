@@ -1,0 +1,148 @@
+@startuml arquitectura_api
+!theme plain
+title Arquitectura Interna — .NET Web API\n(Clean Architecture + Multi-Tenant + Service Layer)
+' Sin MediatR ni AutoMapper (licencia comercial)
+' Reemplazados por Service Layer + Mapster (MIT)
+
+skinparam packageStyle rectangle
+skinparam rectangleBorderColor #3A5FCD
+skinparam rectangleBackgroundColor #F8FBFF
+skinparam ArrowColor #3A5FCD
+skinparam ArrowFontSize 10
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+skinparam linetype ortho
+
+' ══════════════════════════════════════════════════════════════
+' CAPA API (Entry Point)
+' ══════════════════════════════════════════════════════════════
+
+package "**API Layer**\n(RepairCenter.API)" as apilayer #D0E8FF {
+
+  rectangle "Controllers\n—————————\nClientesController\nDispositivosController\nOrdenesController\nDiagnosticoController\nCotizacionesController\nReparacionesController\nInventarioController\nCustodiaController\nEntregasController\nGarantiasController\nTecnicosController\nReportesController\nNotificacionesController" as controllers #BDD8FF
+
+  rectangle "Middleware\n—————————\n• TenantResolutionMiddleware  ← NUEVO\n  (resuelve Tenant desde JWT / header)\n• JWT Auth Handler\n• Rate Limiting (por Tenant)\n• Exception Handler\n• Request Logging\n• CORS Policy" as middleware #BDD8FF
+
+  rectangle "Hubs (SignalR)\n—————————\n• OrdenStatusHub\n  (actualizaciones en\n   tiempo real al dashboard)" as hubs #BDD8FF
+
+  rectangle "Swagger / OpenAPI\n—————————\n• Documentación\n  auto-generada\n• Versionado de API (v1)" as swagger #BDD8FF
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' CAPA APPLICATION (Casos de Uso)
+' ══════════════════════════════════════════════════════════════
+
+package "**Application Layer**\n(RepairCenter.Application)" as applayer #D0FFE8 {
+
+  rectangle "Service Layer\n(Reemplaza MediatR — sin dependencia externa)\n—————————\n• IServiceFactory ← única entrada desde Controllers\n• IOrdenService\n• IClienteService\n• IDiagnosticoService\n• IReparacionService\n• IEntregaService\n• IGarantiaService\n• IInventarioService\n• INotificacionService\n• IReporteService" as usecases #BBEED8
+
+  rectangle "Request / Response Models\n(sin AutoMapper)\n—————————\n• OrdenDto, ClienteDto\n• DispositivoDto, CotizacionDto\n• ReparacionDto, EntregaDto\n• GarantiaDto, ReporteDto\n• Mapping: Mapster (MIT, gratuito)\n  o extension methods estáticos\n  entity.ToDto() / request.ToEntity()" as dtos #BBEED8
+
+  rectangle "Validators\n(FluentValidation)\n—————————\n• CrearOrdenValidator\n• AprobarCotizacionValidator\n• RegistrarPagoValidator ..." as validators #BBEED8
+
+  rectangle "Interfaces (Puertos)\n—————————\n• IRepository<T>           ← genérico (escritura)\n• IReadRepository<T>       ← genérico (lectura, Dapper)\n• IOrdenRepository          ← específico escritura\n• IOrdenReadRepository      ← específico lectura\n• IReporteReadRepository    ← reportes / dashboards\n• IClienteRepository\n• IInventarioRepository\n• IUnitOfWork              ← transacciones\n• INotificacionService\n• IFileStorageService\n• ITenantContext            ← multi-tenant\n• ITenantConfigRepository" as interfaces #BBEED8
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' CAPA DOMAIN (Núcleo del negocio)
+' ══════════════════════════════════════════════════════════════
+
+package "**Domain Layer**\n(RepairCenter.Domain)" as domainlayer #FFF8DC {
+
+  rectangle "Entities (Agregados)\n—————————\n• OrdenReparacion  ← Agregado raíz\n• Cliente\n• Dispositivo\n• Tecnico\n• Repuesto\n• Tenant / Empresa     ← NUEVO\n  (configuración por empresa,\n   políticas, plazos de custodia,\n   montos de almacenaje, etc.)" as entities #FFF0A8
+
+  rectangle "Value Objects\n—————————\n• NumeroTicket\n• EstadoOrden\n• CondicionFisica\n• Dinero (monto + moneda)\n• PeriodoGarantia\n• TenantId              ← NUEVO" as valueobjects #FFF0A8
+
+  rectangle "Domain Events\n—————————\n• OrdenCreadaEvent\n• EstadoCambiadoEvent\n• CotizacionAprobadaEvent\n• ReparacionCompletadaEvent\n• DispositivoListoParaEntregarEvent\n• GarantiaReclamadaEvent\n• AlmacenajeIniciadoEvent\n• DispositivoAbandonadoEvent" as domainevents #FFF0A8
+
+  rectangle "Business Rules\n—————————\n• OrdenNoModificableUnaVezEntregada\n• TicketInmutableUnaVezGenerado\n• EstadoFisicoObligatorioAntesDeLaOrden\n• CustodiaSeCalculaDesdeDisponibilidad\n• ReincidenciaMáximoNIntentosRule\n• GarantiaAplicaSoloMismaFallaRule" as rules #FFF0A8
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' CAPA INFRASTRUCTURE (Adaptadores)
+' ══════════════════════════════════════════════════════════════
+
+package "**Infrastructure Layer**\n(RepairCenter.Infrastructure)" as infralayer #FFE8F0 {
+
+  rectangle "Persistence\n(EF Core + Npgsql  /  MongoDB.Driver)\n—————————\n• AppDbContext (EF Core — PostgreSQL)\n• MongoDbContext (MongoDB.Driver)\n• EfRepository<T>  /  MongoRepository<T>\n• EfUnitOfWork  /  MongoUnitOfWork\n• Global Query Filters por TenantId\n  (solo en EF Core — en Mongo es manual)\n• Columnas jsonb para datos flexibles\n• La implementación activa se registra\n  en Program.cs con una sola línea" as persistence #FFD0E0
+
+  rectangle "External Services\n(Adaptadores)\n—————————\n• OneSignalNotificationAdapter\n  (push móvil + push web + email)\n• LocalFileStorageAdapter\n• BlobStorageAdapter\n• TenantContextAccessor" as externalservices #FFD0E0
+
+  rectangle "Background Jobs\n(Worker Services)\n—————————\n• CustodiaJob\n  (verifica días / aplica cargos)\n• NotificacionJob\n  (procesa cola de mensajes)\n• AbandonoJob\n  (declara abandonos)\n• RecordatorioJob\n  (recordatorios programados)" as jobs #FFD0E0
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' DEPENDENCIAS ENTRE CAPAS
+' ══════════════════════════════════════════════════════════════
+
+controllers  ..>  usecases    : invoca Commands\ny Queries vía MediatR
+middleware   ..>  controllers : intercepta\npeticiones HTTP
+hubs         ..>  usecases    : suscribe a\nDomain Events
+
+usecases     ..>  entities    : opera sobre\nagregados
+usecases     ..>  interfaces  : define contratos\n(inversión de dependencia)
+usecases     ..>  validators  : valida entrada\nantes de ejecutar
+
+entities     ..>  valueobjects  : contiene
+entities     ..>  domainevents  : publica
+entities     ..>  rules         : aplica
+
+persistence       ..>  interfaces    : implementa
+externalservices  ..>  interfaces    : implementa
+jobs              ..>  usecases      : ejecuta casos\nde uso programados
+
+note bottom of domainlayer
+  El Domain Layer NO depende
+  de ninguna otra capa.
+  Es el núcleo puro del negocio.
+  Las demás capas dependen de él.
+end note
+
+note right of domainevents
+  Los Domain Events desacoplan
+  la lógica: cuando una orden
+  cambia de estado, el evento
+  dispara la notificación al cliente
+  sin que la entidad sepa nada
+  del servicio de mensajería.
+end note
+
+note right of jobs
+  Los Worker Services corren
+  de forma independiente a la API.
+  Se comunican con la BD directamente
+  y con la cola de notificaciones,
+  sin pasar por los Controllers.
+end note
+
+' ══════════════════════════════════════════════════════════════
+' PROYECTOS DE LA SOLUCIÓN
+' ══════════════════════════════════════════════════════════════
+
+package "Solución .NET — Proyectos" as solucion #F0F0F0 {
+  rectangle "RepairCenter.API\nRepairCenter.Application\nRepairCenter.Domain\nRepairCenter.Infrastructure.EfCore\nRepairCenter.Infrastructure.MongoDb\nRepairCenter.WorkerServices\nRepairCenter.MultiTenancy\nRepairCenter.Tests.Unit\nRepairCenter.Tests.Integration" as proyectos #E8E8E8
+}
+
+note bottom of solucion
+  Infrastructure se split en dos proyectos:
+  • Infrastructure.EfCore   → PostgreSQL (fase inicial)
+  • Infrastructure.MongoDb  → MongoDB (cuando se migre)
+  Program.cs decide cuál registrar.
+  Ningún otro proyecto cambia.
+
+  Dependencias externas elegidas (todas MIT / free):
+  • Npgsql.EntityFrameworkCore.PostgreSQL
+  • Dapper  (lecturas complejas / reportes — Apache 2.0)
+  • MongoDB.Driver
+  • FluentValidation
+  • Mapster  (reemplaza AutoMapper — MIT)
+  • Serilog
+  • SignalR (incluido en ASP.NET Core)
+  • Sin MediatR  •  Sin AutoMapper
+end note
+
+@enduml

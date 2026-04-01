@@ -1,0 +1,259 @@
+@startuml flujo_completo_centro_reparacion
+!theme plain
+title Flujo Completo — Centro de Reparación\n(Aplicable a: electrónica, vehículos, electrodomésticos, maquinaria, y más)
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 12
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+skinparam PartitionBorderColor #3A5FCD
+skinparam PartitionBackgroundColor #F8FBFF
+skinparam PartitionFontSize 13
+skinparam PartitionFontStyle bold
+
+start
+
+' ══════════════════════════════════════════════════════════════
+' FASE 1 — RECEPCIÓN
+' ══════════════════════════════════════════════════════════════
+
+partition "① RECEPCIÓN" {
+
+  :Cliente llega al Centro de Reparación\nreportando una falla en su dispositivo/vehículo/equipo;
+
+  note right
+    **Tipos de elemento reparable:**
+    • Electrónica: celular, PC, consola
+    • Vehículos: moto, auto, bicicleta eléctrica
+    • Electrodomésticos: lavadora, microondas
+    • Maquinaria: taladro, generador
+    • Otro: cualquier equipo con falla identificable
+  end note
+
+  :Identificar o registrar al cliente\n(nombre, teléfono, email);
+
+  :Registrar el elemento a reparar\n• Tipo / Categoría\n• Marca / Modelo\n• Identificador único (N° serie, placa, N° motor)\n• Color / características físicas distintivas\n• Accesorios o partes que acompañan al elemento;
+
+  :Documentar estado físico inicial\n• Checklist de condición\n• Evidencia fotográfica (mínimo 1 foto)\n• Observaciones relevantes visibles;
+
+  :Registrar falla reportada\npor el cliente (en sus propias palabras);
+
+  :Generar Orden de Reparación\n• Número único de ticket\n• Fecha y hora de ingreso\n• Prioridad: Normal / Urgente / Express\n• Técnico asignado (o pendiente)\n• Fecha estimada de diagnóstico;
+
+  :Entregar comprobante al cliente\nNotificar por WhatsApp / SMS / Email:\n"Tu [elemento] fue recibido. Ticket: [código].";
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' FASE 2 — DIAGNÓSTICO
+' ══════════════════════════════════════════════════════════════
+
+partition "② DIAGNÓSTICO" {
+
+  :Asignar técnico especialista\no de mayor experiencia\npara el tipo de elemento;
+
+  :Notificar al cliente\n"Tu elemento está en diagnóstico.";
+
+  :Técnico inspecciona el elemento\nDocumenta:\n• Tipo de falla: mecánica / eléctrica / software / estructural\n• Componentes o sistemas afectados\n• Causa probable\n• Nivel de complejidad;
+
+  if (¿El elemento\nes reparable?) then (Sí)
+
+    :Generar cotización desglosada\n• Mano de obra\n• Repuestos / materiales\n• Tiempo estimado de reparación\n• Vigencia de la cotización;
+
+    :Enviar cotización al cliente\nvía canal de preferencia;
+
+    if (¿Cliente aprueba\nla cotización?) then (Aprueba)
+      :Registrar aprobación\n(fecha, hora, canal);
+    else if (No responde\nen el plazo?) then (Sin respuesta)
+      :Enviar recordatorio automático;
+      if (¿Responde al\nrecordatorio?) then (Responde)
+        :Re-evaluar decisión del cliente;
+      else (No responde)
+        :Estado → PENDIENTE_DE_CONTACTO\nSeguimiento manual;
+        stop
+      endif
+    else (Rechaza)
+      :Estado → CANCELADO_POR_CLIENTE\nPreparar para devolución;
+      note right: Continúa en\nFase 5 — Custodia
+    endif
+
+  else (No es reparable)
+    :Documentar motivo técnico\nEstado → SIN_REPARACION\nNotificar al cliente;
+    note right: Continúa en\nFase 5 — Custodia
+  endif
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' FASE 3 — REPARACIÓN
+' ══════════════════════════════════════════════════════════════
+
+partition "③ REPARACIÓN" {
+
+  :Estado → EN_REPARACIÓN\nTécnico registra inicio\n(timestamp);
+
+  :Notificar al cliente\n"¡Comenzamos la reparación!";
+
+  if (¿Requiere repuestos\no materiales?) then (Sí)
+    if (¿Disponibles\nen stock?) then (Sí)
+      :Descontar del inventario;
+    else (No disponibles)
+      :Estado → ESPERANDO_REPUESTOS\nGestionar con proveedor\nNotificar al cliente\nPausar reloj de custodia;
+      :Repuesto llega → descontar inventario\nEstado → EN_REPARACIÓN\nNotificar al cliente;
+    endif
+  else (No requiere)
+    :Continuar solo\ncon mano de obra;
+  endif
+
+  :Ejecutar la reparación\nRegistrar bitácora:\n• Pasos realizados\n• Componentes intervenidos\n• Herramientas / técnicas\n• Timestamps de trabajo;
+
+  if (¿Se descubren fallas\nadicionales no cotizadas?) then (Sí)
+    :Pausar → PAUSA_FALLA_ADICIONAL\nNotificar al cliente\ncon cotización adicional;
+    if (¿Cliente aprueba\nel adicional?) then (Aprueba)
+      :Continuar con\nreparación ampliada;
+    else (Rechaza)
+      :Documentar reparación parcial\nContinuar solo con\nlo originalmente cotizado;
+    endif
+  else (Sin fallas\nadicionales)
+    :Continuar\nsin interrupciones;
+  endif
+
+  :Técnico registra fin de intervención\n(timestamp);
+
+  :Ejecutar pruebas de verificación funcional\n¿La falla fue resuelta?\n¿Las funciones básicas responden?;
+
+  if (¿Pasa las pruebas?) then (Pasa)
+    :Estado → LISTO_PARA_ENTREGA\nNotificar al cliente\n"¡Tu [elemento] está listo para retirar!";
+  else (Falla)
+    :Reintento documentado\no escalamiento a técnico senior;
+    if (¿Se resuelve\ntras escalamiento?) then (Sí)
+      :Estado → LISTO_PARA_ENTREGA\nNotificar al cliente;
+    else (No)
+      :Estado → REPARACION_FALLIDA\nNotificar al cliente\n(sin cobro de reparación);
+      note right: Continúa en\nFase 5 — Custodia
+    endif
+  endif
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' FASE 4 — ENTREGA Y COBRO
+' ══════════════════════════════════════════════════════════════
+
+partition "④ ENTREGA Y COBRO" {
+
+  :Cliente se presenta a retirar;
+
+  :Verificar identidad y ticket\n(comprobante o datos del cliente);
+
+  :Calcular total consolidado\n• Mano de obra (si aplica)\n• Repuestos / materiales (si aplica)\n• Diagnóstico (según política)\n• Almacenaje acumulado (si aplica);
+
+  if (¿Hay monto\na cobrar?) then (Sí)
+    :Presentar desglose al cliente\nProcesar pago\n• Efectivo / Tarjeta / Transferencia\nEmitir comprobante de pago;
+  else (Sin cobro)
+    :Registrar entrega sin cargo;
+  endif
+
+  :Verificar físicamente el elemento\ncontra checklist y fotos de recepción\n¿Todos los accesorios registrados\nestán presentes?;
+
+  if (¿Reparación\nexitosa?) then (Sí)
+    :Emitir documento de garantía\n• Falla cubierta\n• Vigencia: [N días]\n• Condiciones y exclusiones explícitas;
+  else (Sin garantía)
+    :Entrega sin garantía\n(documentado);
+  endif
+
+  :Cliente firma conformidad de entrega\n• Recibió el elemento\n• Recibió los accesorios\n• Acepta condiciones de garantía\n• Informado del estado técnico actual;
+
+  :Estado → ENTREGADO\nNotificación final al cliente\n"Gracias por confiar en nosotros.";
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' FASE 5 — CUSTODIA Y SALIDA
+' ══════════════════════════════════════════════════════════════
+
+partition "⑤ CUSTODIA Y POLÍTICA DE SALIDA" {
+
+  note
+    Esta fase aplica cuando el elemento
+    queda disponible para retiro pero
+    el cliente no lo recoge a tiempo.
+    Aplica para cualquier estado de origen:
+    LISTO_PARA_ENTREGA, SIN_REPARACION,
+    CANCELADO_POR_CLIENTE, REPARACION_FALLIDA.
+  end note
+
+  :Reloj de custodia activo\ndesde que el elemento\nestá disponible para retiro\n(Día 0);
+
+  :Día 3  → 1er recordatorio automático;
+  :Día 7  → 2do recordatorio + AVISO FORMAL\n(cargos y política de abandono informados);
+  :Día 15 → Estado → COBRO_ALMACENAJE\nCargo diario/semanal acumulando;
+
+  if (¿Cliente retira\nantes del Día 30?) then (Sí)
+    :Calcular almacenaje acumulado\nIncluir en cobro total\nContinuar → Fase 4 Entrega y Cobro;
+    stop
+  else (Día 30 sin retiro)
+    :Estado → DISPOSITIVO_ABANDONADO\nNotificación final con plazo límite;
+
+    if (¿Cliente contacta\nantes del plazo final?) then (Sí)
+      :Evaluar excepción manualmente\n(decisión del negocio);
+      :Si acepta → cobro total acumulado\n→ Fase 4 Entrega;
+      stop
+    else (No contacta)
+      :Ejecutar política de disposición\n(donación / descarte / venta interna)\nRegistrar acción y responsable\nEstado → CERRADO_POR_ABANDONO;
+      stop
+    endif
+  endif
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' FASE 6 — GARANTÍA
+' ══════════════════════════════════════════════════════════════
+
+partition "⑥ GARANTÍA POR REINCIDENCIA" {
+
+  note
+    Esta fase se activa cuando el cliente
+    regresa reportando la misma falla
+    después de haber retirado el elemento.
+  end note
+
+  :Cliente regresa al centro\nreportando reincidencia de la falla;
+
+  :Validar garantía:\n• Ticket original válido\n• Dentro del período de cobertura\n• Sin causas que anulen la garantía\n  (golpes, manipulación por terceros,\n   daño eléctrico externo, etc.);
+
+  if (¿Garantía válida\ny misma falla?) then (Sí)
+
+    :Registrar reincidencia\n(número de reincidencia: N);
+
+    if (¿Es la 2da reincidencia\no más?) then (Sí)
+      :Asignación obligatoria\na técnico senior o especialista\nAlerta de reincidencia múltiple;
+    else (1ra reincidencia)
+      :Asignación preferida al\ntécnico original;
+    endif
+
+    :Abrir nueva Orden tipo GARANTÍA\n• Vinculada al ticket original\n• Sin costo para el cliente\nEstado → EN_REPARACIÓN directamente;
+
+    :Continuar en → Fase 3 Reparación\n(sin diagnóstico ni cotización);
+
+    if (¿Reparación de\ngarantía exitosa?) then (Sí)
+      :Emitir garantía renovada\nContinuar → Fase 4 Entrega;
+      stop
+    else (Falla persiste)
+      :Estado → GARANTIA_FALLIDA\nEscalar al responsable del negocio\nAplicar política de compensación\n(reembolso / derivación externa / descuento);
+      stop
+    endif
+
+  else (Garantía no válida\no falla diferente)
+    :Informar al cliente con evidencia\nOfrecer nueva orden regular si desea;
+    stop
+  endif
+
+}
+
+@enduml

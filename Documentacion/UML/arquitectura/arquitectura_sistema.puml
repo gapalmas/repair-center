@@ -1,0 +1,116 @@
+@startuml arquitectura_sistema
+!theme plain
+title Arquitectura del Sistema — Centro de Reparación\n(Vista de Contenedores — C4 Level 2)\nMulti-Tenant | API-First | Clean Architecture
+
+skinparam componentStyle rectangle
+skinparam rectangleBorderColor #3A5FCD
+skinparam rectangleBackgroundColor #F0F4FF
+skinparam rectangleFontSize 12
+skinparam ArrowColor #3A5FCD
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+skinparam actorBorderColor #3A5FCD
+skinparam actorBackgroundColor #FFFFFF
+skinparam linetype ortho
+
+' ─── ACTORES ──────────────────────────────────────────────────
+
+actor "Técnico /\nRecepcionista" as tecnico
+actor "Cliente" as cliente
+actor "Administrador\ndel Negocio" as admin
+
+' ─── CLIENTES (Frontend) ──────────────────────────────────────
+
+package "Capa de Presentación" as presentacion #E8F4FF {
+
+  rectangle "**Web App**\n—————————\nNext.js 14 (App Router)\nReact / TypeScript\n—————————\n• Panel de gestión de órdenes\n• Dashboard de técnicos\n• Reportes y estadísticas\n• Administración del negocio" as webapp #D0E8FF
+
+  rectangle "**Mobile App**\n—————————\nFlutter (iOS / Android)\n—————————\n• Seguimiento de ticket\n  por parte del cliente\n• Notificaciones push\n• Consulta de estado\n  y cotización\n• Historial de reparaciones" as mobileapp #D0FFE8
+
+}
+
+' ─── API ──────────────────────────────────────────────────────
+
+package "Backend" as backend #FFF8E8 {
+
+  rectangle "**Web API**\n—————————\n.NET 8 — ASP.NET Core\nClean Architecture\n—————————\n• REST endpoints JSON\n• Autenticación JWT + TenantId\n• SignalR (tiempo real)\n• Swagger / OpenAPI\n• FluentValidation\n• Rate Limiting\n• Tenant Middleware" as api #FFF0C0
+
+  rectangle "**Servicio de Notificaciones**\n—————————\n.NET Worker Service\n—————————\n• Cola interna de notificaciones\n• OneSignal (push web + móvil)\n• Recordatorios automáticos\n• Alertas de cambio de estado\n• Avisos de custodia / abandono\n• Aislado por Tenant" as notifservice #FFE8C0
+
+  rectangle "**Servicio de Custodia**\n—————————\n.NET Worker Service\n—————————\n• Job programado (diario)\n• Evalúa días en custodia\n• Dispara recordatorios\n• Aplica cargos de almacenaje\n• Declara abandonos" as custodiaservice #FFE8C0
+
+}
+
+' ─── ALMACENAMIENTO ───────────────────────────────────────────
+
+package "Persistencia y Almacenamiento" as persistencia #F0FFE8 {
+
+  database "**Base de Datos**\n—————————\nPostgreSQL 16\n(EF Core + Dapper + Npgsql)\n—————————\n• Columnas relacionales tipadas\n  para datos consultables e indexados\n• Columnas jsonb para datos flexibles:\n  — características del dispositivo\n  — bitácora técnica detallada\n  — metadatos de archivos\n  — atributos extendidos por tenant\n• TenantId en todas las tablas\n• Global Query Filters por Tenant\n• CQRS simplificado:\n  Escrituras → EF Core (DbContext)\n  Lecturas   → Dapper (SQL puro)\n• Preparada para migración a\n  microservicios / MongoDB" as db #C8F0C8
+
+  rectangle "**Almacenamiento de Archivos**\n—————————\nFile Storage\n(Local / Azure Blob / S3)\n—————————\n• Fotos de recepción\n• Fotos de estado físico\n• Documentos de garantía\n• Comprobantes de pago\n• Firmas digitales" as filestorage #C8F0C8
+
+}
+
+' ─── SERVICIOS EXTERNOS ───────────────────────────────────────
+
+package "Servicios Externos" as externos #FFE8F0 {
+
+  rectangle "**OneSignal**\n—————————\n• Push Notifications (móvil)\n• Push Notifications (web)\n• Email campaigns\n• SMS (canal adicional)\n• Segmentación por Tenant" as onesignal #FFD0E0
+
+}
+
+package "Visión ERP — Bounded Contexts Futuros" as erp #F5F0FF {
+  rectangle "Módulo Inventario" as modinventario #E8E0FF
+  rectangle "Módulo Facturación" as modfacturacion #E8E0FF
+  rectangle "Módulo RRHH / Técnicos" as modrrhh #E8E0FF
+  rectangle "Módulo Reportes / BI" as modreportes #E8E0FF
+}
+
+' ─── RELACIONES — ACTORES → FRONTEND ─────────────────────────
+
+tecnico   --> webapp      : Gestiona órdenes\nregistra diagnósticos\ny reparaciones
+admin     --> webapp      : Administra el negocio\nve reportes y dashboard
+cliente   --> mobileapp   : Consulta ticket\nve estado y cotización\naprueba / rechaza
+
+' ─── RELACIONES — FRONTEND → API ─────────────────────────────
+
+webapp     --> api  : HTTPS / REST\nJWT Auth
+mobileapp  --> api  : HTTPS / REST\nJWT Auth
+
+note on link
+  Todos los clientes
+  consumen la misma API.
+  API-first design.
+end note
+
+' ─── RELACIONES — API → SERVICIOS ────────────────────────────
+
+api --> db           : EF Core (escrituras)\nDapper (lecturas)
+api --> filestorage  : Upload / Download\nfotos y documentos
+api --> notifservice : Publica evento\nen cola interna
+api --> webapp       : SignalR\n(actualizaciones en tiempo real\ndel estado de la orden)
+api --> mobileapp    : Push Notifications\n(Firebase / APNs)
+
+custodiaservice --> db           : Lee órdenes activas\nActualiza estados
+custodiaservice --> notifservice : Solicita envío\nde recordatorios
+
+' ─── RELACIONES — NOTIFICACIONES → EXTERNOS ──────────────────
+
+notifservice --> onesignal : REST API\n(push / email / SMS)
+
+' ─── VISIÓN ERP ───────────────────────────────────────────────
+
+api ..> modinventario    : futuro bounded context
+api ..> modfacturacion   : futuro bounded context
+api ..> modrrhh          : futuro bounded context
+api ..> modreportes      : futuro bounded context
+
+note bottom of erp
+  Todos los módulos del ERP comparten
+  la misma capa de Multi-Tenancy.
+  Cada empresa accede solo a sus datos.
+  El módulo de Reparación es
+  el primer bounded context.
+end note
+
+@enduml

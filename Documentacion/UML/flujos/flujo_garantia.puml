@@ -1,0 +1,246 @@
+@startuml flujo_garantia
+!theme plain
+title Flujo de Garantía por Reincidencia de Falla — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+start
+
+:Cliente regresa al taller\nreportando que la falla reparada\nha vuelto a presentarse;
+
+' ─── VALIDACIÓN DEL TICKET ────────────────────────────────────
+
+partition "Validación del Ticket y Garantía" {
+
+  :Solicitar comprobante de entrega\n(ticket original o código QR);
+
+  if (¿El cliente presenta\nel ticket original?) then (Sí)
+    :Localizar la orden original en el sistema;
+  else (No tiene ticket)
+    :Buscar orden por nombre,\nteléfono y datos del dispositivo;
+
+    if (¿Se localiza la\noriden original?) then (Sí)
+      :Continuar con la orden localizada;
+    else (No se localiza)
+      :Informar al cliente que sin\nidentificación de la orden\nno es posible aplicar garantía;
+      :Ofrecer apertura de\nnueva orden regular si desea;
+      stop
+    endif
+  endif
+
+  :Verificar estado de la orden original\n• Debe estar en estado: **ENTREGADO**\n• Debe tener garantía emitida;
+
+  if (¿La orden tiene\ngarantía registrada?) then (Sí)
+
+    :Recuperar condiciones de garantía:\n• Fecha de entrega\n• Fecha de vencimiento\n• Falla cubierta (descripción exacta)\n• Exclusiones registradas;
+
+    if (¿La fecha actual\nestá dentro del\nperíodo de garantía?) then (Sí)
+      :Garantía vigente — continuar evaluación;
+    else (Garantía vencida)
+      :Informar al cliente\ncon fecha exacta de vencimiento;
+      :Ofrecer apertura de\nnueva orden regular si desea;
+      stop
+    endif
+
+  else (No tiene garantía\no fue una entrega\nsin reparación exitosa)
+    :Informar al cliente que la\norden original no generó garantía;
+    :Ofrecer apertura de\nnueva orden regular si desea;
+    stop
+  endif
+
+}
+
+' ─── EVALUACIÓN DE EXCLUSIONES ────────────────────────────────
+
+partition "Evaluación de Condiciones de Cobertura" {
+
+  :Técnico inspecciona el dispositivo\npara verificar condiciones de garantía;
+
+  note right
+    Se revisa visualmente si hay
+    indicios de causas que anulan
+    la garantía, antes de aceptar
+    el reclamo formalmente.
+  end note
+
+  :Verificar ausencia de causas\nque anulan la garantía:\n□ Golpes o caídas post-entrega\n□ Exposición a líquidos post-entrega\n□ Apertura o manipulación por terceros\n□ Modificaciones no autorizadas\n□ Daño eléctrico externo (ej. voltaje);
+
+  if (¿Se detecta alguna\ncausa que anula\nla garantía?) then (Sí)
+
+    :Documentar evidencia técnica\nde la causa detectada\n(descripción + fotos);
+
+    :Informar al cliente que la garantía\nno aplica por la causa encontrada:\n"[descripción de la causa]"\n\nMostrar condiciones firmadas\nal momento de la entrega original;
+
+    if (¿Cliente acepta la\nexplicación técnica?) then (Acepta)
+      :Ofrecer apertura de\nnueva orden regular si desea;
+      stop
+    else (No acepta /\nDisputa la explicación)
+      :Escalar al responsable del negocio\npara resolución del conflicto;
+      :Registrar disputa y\nsu resolución en el historial\nde la orden original;
+      stop
+    endif
+
+  else (Sin causas que\nanulen la garantía)
+    :Condiciones de cobertura\nverificadas — continuar;
+  endif
+
+}
+
+' ─── CONFIRMACIÓN DE REINCIDENCIA ─────────────────────────────
+
+partition "Confirmación de Reincidencia de Falla" {
+
+  :Técnico evalúa si la falla reportada\ncorresponde a la falla reparada originalmente;
+
+  :Falla original cubierta: **[descripción de la orden original]**\nFalla reportada ahora: **[descripción del cliente]**;
+
+  if (¿La falla actual\ncorresponde a la\nfalla reparada?) then (Sí — misma falla)
+
+    :Confirmar reincidencia\nRegistrar en el sistema:\n• Tipo: REINCIDENCIA\n• Número de reincidencia: [N]\n  (1ra, 2da, etc. sobre esta orden)\n• Descripción técnica del síntoma actual;
+
+    note right
+      El contador de reincidencias
+      es clave: una 2da reincidencia
+      sobre la misma falla activa
+      un protocolo de escalamiento
+      obligatorio y puede derivar
+      en política de compensación.
+    end note
+
+  else (No es la misma\nfalla — falla diferente)
+
+    :Documentar que la falla actual\nes distinta a la reparada originalmente;
+
+    :Informar al cliente que la\nnueva falla no está cubierta\npor esta garantía\n(mostrar descripción de falla original cubierta);
+
+    :Ofrecer apertura de\nnueva orden regular si desea;
+    stop
+
+  endif
+
+}
+
+' ─── APERTURA DE ORDEN GARANTÍA ───────────────────────────────
+
+partition "Apertura de Orden de Garantía" {
+
+  :Crear nueva orden de tipo **GARANTÍA**:\n• Número de ticket nuevo (ej: GAR-2026-0005)\n• Vinculada al ticket original: [ticket]\n• Número de reincidencia: [N]\n• Costo para el cliente: **$0**\n• Tipo de orden: GARANTIA\n• Técnico asignado: preferiblemente\n  el mismo de la reparación original;
+
+  note right
+    Si el técnico original
+    ya no está disponible,
+    se asigna al técnico
+    de mayor experiencia
+    con ese tipo de dispositivo.
+  end note
+
+  if (¿Es la 2da reincidencia\no más sobre la\nmisma falla?) then (Sí — 2da+)
+
+    :Asignación obligatoria\na técnico senior o especialista\n(el técnico original no puede\nvolver a ser el único responsable);
+
+    :Registrar alerta de reincidencia\nmúltiple en el sistema;
+
+  else (1ra reincidencia)
+    :Asignación preferida al\ntécnico original;
+  endif
+
+  :Notificar al cliente\n"Hemos registrado tu reclamo de garantía.\nTicket: [GAR-XXXX], vinculado a [ticket original].\nProcedemos sin costo. Te avisamos\ncada cambio de estado.";
+
+}
+
+' ─── EJECUCIÓN TÉCNICA BAJO GARANTÍA ─────────────────────────
+
+partition "Ejecución de la Reparación Bajo Garantía" {
+
+  :Orden pasa directamente a estado\n**EN_REPARACIÓN**\n(sin diagnóstico ni cotización,\nla aprobación ya existe por la garantía);
+
+  :Técnico investiga la causa\nde la reincidencia:\n• ¿Fallo el mismo componente reemplazado?\n• ¿Fue un componente de baja calidad?\n• ¿La técnica de reparación fue la correcta?\n• ¿Hay una causa subyacente no detectada\n  en la reparación original?;
+
+  :Documentar causa raíz de la reincidencia\n(campo obligatorio en orden de garantía);
+
+  :Ejecutar reparación corrigiendo\nla causa raíz identificada;
+
+  if (¿Se requiere reemplazar\ncomponente nuevamente?) then (Sí)
+
+    :Costo del nuevo componente\nes absorbido por el negocio\n(garantía cubre materiales y mano de obra);
+
+    note right
+      Si el componente fallido es
+      de proveedor externo, el negocio
+      puede gestionar el reclamo
+      al proveedor por separado.
+      Eso no impacta al cliente.
+    end note
+
+  else (Solo ajuste\ntécnico)
+    :Aplicar corrección técnica;
+  endif
+
+}
+
+' ─── VERIFICACIÓN Y CIERRE ────────────────────────────────────
+
+partition "Verificación y Cierre de Garantía" {
+
+  :Ejecutar pruebas de verificación funcional\n(igual que en el flujo de reparación normal);
+
+  if (¿Reparación de garantía\nexitosa?) then (Sí)
+
+    :Registrar reparación de garantía\ncomo exitosa en ambas órdenes:\n• En la orden de garantía → ENTREGADO\n• En la orden original → actualizar historial;
+
+    if (¿Es la 1ra reincidencia\ny fue resuelta?) then (Sí)
+
+      :Emitir nueva garantía extendida:\n• Misma falla cubierta\n• Período: [N días] desde esta nueva entrega\n• Vinculada a la orden de garantía\n• Nota: "2da intervención — cobertura renovada";
+
+    else (2da reincidencia\no más)
+
+      :Emitir garantía con nota especial\n"Falla con múltiples reincidencias.\nEsta garantía cubre únicamente\nla misma falla por [N] días adicionales."\n\nRegistrar recomendación técnica\nal cliente sobre el estado\ndel dispositivo;
+
+    endif
+
+    :Proceder al flujo de entrega\n(sin cobro por concepto de garantía\n— solo almacenaje si hubiera acumulado);
+
+    stop
+
+  else (Reparación de\ngarantía fallida)
+
+    ' ─── FALLA PERSISTENTE ────────────────────────────────────
+
+    partition "Falla Persistente — Política de Compensación" {
+
+      :Documentar que la falla persiste\ntras intervención de garantía;
+
+      :Actualizar estado\n**→ GARANTIA_FALLIDA**;
+
+      note right
+        Este escenario representa
+        el caso más crítico para
+        la reputación del negocio.
+        La respuesta debe ser rápida,
+        transparente y documentada.
+      end note
+
+      :Escalar obligatoriamente\nal responsable del negocio;
+
+      :Evaluar opciones de compensación\nsegún política interna del negocio\n(el sistema registra la decisión tomada):\n\n• Opción A: Derivar a especialista externo\n  (sin costo para el cliente)\n• Opción B: Reembolso parcial o total\n  del monto cobrado en la reparación original\n• Opción C: Descuento en futuras reparaciones\n• Opción D: Negociación directa con el cliente;
+
+      :Registrar decisión tomada\ny acuerdos alcanzados\nen el historial de ambas órdenes;
+
+      :Notificar al cliente la\ndecisión y próximos pasos;
+
+      stop
+
+    }
+
+  endif
+
+}
+
+@enduml

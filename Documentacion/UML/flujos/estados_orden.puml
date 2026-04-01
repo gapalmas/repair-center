@@ -1,0 +1,121 @@
+@startuml estados_orden
+!theme plain
+title Diagrama de Estados — Orden de Reparación
+
+skinparam StateBorderColor #3A5FCD
+skinparam StateBackgroundColor #F0F4FF
+skinparam StateHeaderBackgroundColor #3A5FCD
+skinparam StateHeaderFontColor #FFFFFF
+skinparam StateFontSize 12
+skinparam ArrowColor #3A5FCD
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+' ─── ESTADOS TERMINALES (agrupados al final) ──────────────────
+
+state "Estados Terminales" as terminales {
+  state CANCELADO_POR_CLIENTE   #FFD0D0 : Cliente rechazó la cotización
+  state SIN_REPARACION          #FFD0D0 : No tiene solución técnica
+  state PENDIENTE_DE_CONTACTO   #FFE0A0 : Cliente no respondió al diagnóstico
+  state REPARACION_FALLIDA      #FFD0D0 : Reparación no pudo completarse
+  state CERRADO_POR_ABANDONO    #FFAAAA : Dispositivo abandonado — disposición ejecutada
+  state GARANTIA_FALLIDA        #FFD0D0 : Falla persiste tras intervención de garantía
+  state ENTREGADO               #C8F0C8 : Orden cerrada exitosamente
+}
+
+' ─── ESTADOS ACTIVOS ──────────────────────────────────────────
+
+state RECIBIDO                  #D0E8FF : Dispositivo ingresó al taller\nSe generó ticket de orden
+state EN_DIAGNOSTICO            #D0E8FF : Técnico evaluando el dispositivo
+state ESPERANDO_APROBACION      #FFF8DC : Cotización enviada al cliente\nEsperando respuesta
+state EN_REPARACION             #D0FFD0 : Técnico ejecutando la reparación
+state ESPERANDO_REPUESTOS       #FFF0C0 : Reparación pausada por falta\nde repuesto en stock
+state PAUSA_FALLA_ADICIONAL     #FFF0C0 : Falla adicional descubierta\nEsperando aprobación del cliente
+state LISTO_PARA_ENTREGA        #C8F0C8 : Reparación completada y verificada\nCliente notificado para retirar
+state COBRO_ALMACENAJE          #FFE0A0 : Dispositivo en custodia extendida\nCargo diario/semanal acumulando
+
+state DISPOSITIVO_ABANDONADO    #FFCCAA : Superó el plazo máximo\nPendiente de disposición final
+
+' ─── TRANSICIONES ─────────────────────────────────────────────
+
+[*]                         --> RECIBIDO                 : Cliente entrega dispositivo\nSe genera ticket
+
+RECIBIDO                    --> EN_DIAGNOSTICO           : Técnico asignado
+
+EN_DIAGNOSTICO              --> ESPERANDO_APROBACION     : Diagnóstico completado\nCotización generada
+EN_DIAGNOSTICO              --> SIN_REPARACION           : Dispositivo no tiene\nsolución técnica
+
+ESPERANDO_APROBACION        --> EN_REPARACION            : Cliente aprueba\nla cotización
+ESPERANDO_APROBACION        --> CANCELADO_POR_CLIENTE    : Cliente rechaza\nla cotización
+ESPERANDO_APROBACION        --> PENDIENTE_DE_CONTACTO    : Cliente no responde\ntras recordatorio(s)
+
+PENDIENTE_DE_CONTACTO       --> ESPERANDO_APROBACION     : Cliente contacta\ny responde
+PENDIENTE_DE_CONTACTO       --> COBRO_ALMACENAJE         : Supera Día 15\nsin contacto
+
+EN_REPARACION               --> ESPERANDO_REPUESTOS      : Repuesto requerido\nno disponible en stock
+EN_REPARACION               --> PAUSA_FALLA_ADICIONAL    : Se detecta falla adicional\nno cotizada
+EN_REPARACION               --> LISTO_PARA_ENTREGA       : Reparación completada\ny verificada satisfactoriamente
+EN_REPARACION               --> REPARACION_FALLIDA       : Falla irresoluble tras\nmúltiples intentos / escalamientos
+
+ESPERANDO_REPUESTOS         --> EN_REPARACION            : Repuesto recibido\ndel proveedor
+
+PAUSA_FALLA_ADICIONAL       --> EN_REPARACION            : Cliente aprueba\nel costo adicional
+PAUSA_FALLA_ADICIONAL       --> EN_REPARACION            : Cliente rechaza adicional\n(reparación parcial documentada)
+
+LISTO_PARA_ENTREGA          --> ENTREGADO                : Cliente retira dispositivo\ny firma conformidad
+LISTO_PARA_ENTREGA          --> COBRO_ALMACENAJE         : Cliente no retira\ndespués del Día 15
+
+SIN_REPARACION              --> COBRO_ALMACENAJE         : Cliente no retira\ndespués del Día 15
+SIN_REPARACION              --> ENTREGADO                : Cliente retira\nel dispositivo
+
+CANCELADO_POR_CLIENTE       --> COBRO_ALMACENAJE         : Cliente no retira\ndespués del Día 15
+CANCELADO_POR_CLIENTE       --> ENTREGADO                : Cliente retira\nel dispositivo
+
+REPARACION_FALLIDA          --> COBRO_ALMACENAJE         : Cliente no retira\ndespués del Día 15
+REPARACION_FALLIDA          --> ENTREGADO                : Cliente retira\n(sin cobro de reparación)
+
+COBRO_ALMACENAJE            --> ENTREGADO                : Cliente retira\ny paga saldo acumulado
+COBRO_ALMACENAJE            --> DISPOSITIVO_ABANDONADO   : Supera el Día 30\nsin retirar
+
+DISPOSITIVO_ABANDONADO      --> ENTREGADO                : Cliente contacta\nantes del plazo final\ny negocio acepta entrega
+DISPOSITIVO_ABANDONADO      --> CERRADO_POR_ABANDONO     : Plazo final vencido\nSe ejecuta política de disposición
+
+ENTREGADO                   --> EN_REPARACION            : Cliente reclama garantía\nvigente por misma falla\n(nueva orden tipo GARANTIA vinculada)
+ENTREGADO                   --> GARANTIA_FALLIDA         : Reparación de garantía\nfalla tras múltiples intentos
+
+GARANTIA_FALLIDA            --> [*]                      : Compensación aplicada\nCaso cerrado
+
+CERRADO_POR_ABANDONO        --> [*]
+ENTREGADO                   --> [*]                      : Sin reclamo de garantía\nFlujo completamente cerrado
+
+' ─── NOTAS ───────────────────────────────────────────────────
+
+note right of ESPERANDO_REPUESTOS
+  El reloj de custodia
+  se PAUSA mientras la orden
+  está en este estado.
+  El cliente no paga almacenaje
+  por espera de repuestos.
+end note
+
+note right of COBRO_ALMACENAJE
+  Aplica a cualquier estado
+  que supere el Día 15
+  sin que el cliente retire.
+  Cargo acumulado: $[monto/día].
+end note
+
+note right of ENTREGADO
+  Desde ENTREGADO puede originarse
+  una orden tipo GARANTÍA si la
+  misma falla reincide dentro
+  del período de cobertura.
+end note
+
+note bottom of terminales
+  Los estados SIN_REPARACION, CANCELADO_POR_CLIENTE y REPARACION_FALLIDA
+  son terminales operativos pero pueden transicionar a COBRO_ALMACENAJE
+  si el cliente no retira el dispositivo dentro del plazo de custodia.
+end note
+
+@enduml

@@ -1,0 +1,148 @@
+@startuml flujo_custodia_salida
+!theme plain
+title Flujo de Custodia y Salida del Dispositivo — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+start
+
+:Dispositivo disponible para salida\n(origen puede ser cualquiera de los siguientes estados)\n—————————————————————————\n• **LISTO_PARA_ENTREGA**     — reparación completada\n• **SIN_REPARACION**         — no tiene solución técnica\n• **CANCELADO_POR_CLIENTE** — rechazó la cotización\n• **PENDIENTE_DE_CONTACTO** — nunca respondió al diagnóstico;
+
+note right
+  El reloj de custodia
+  comienza el mismo día
+  en que el dispositivo
+  queda disponible para salida.
+  Los plazos son configurables
+  por el negocio.
+end note
+
+' ─── NOTIFICACIÓN INICIAL ─────────────────────────────────────
+
+partition "Día 0 — Notificación Inicial" {
+  :Notificar al cliente\n"Tu dispositivo está listo para retirar.\nPor favor coordina tu visita.\nDirección: [dirección del local].";
+  :Registrar fecha/hora de\nnotificación inicial\n(inicio del contador de custodia);
+}
+
+' ─── SEGUIMIENTO ──────────────────────────────────────────────
+
+partition "Seguimiento Automático de Custodia" {
+
+  if (¿Cliente retira el dispositivo\ndentro de los primeros 3 días?) then (Sí)
+
+    :Proceder a entrega\n(continuar flujo de entrega);
+    stop
+
+  else (No retira)
+
+    ' ── 1er recordatorio ────────────────────────────────────
+
+    :Enviar 1er recordatorio\n**Día 3**\n"Aún tienes tu dispositivo en nuestro taller.\nTe esperamos para coordinar el retiro.";
+
+    if (¿Cliente retira el dispositivo\nantes del Día 7?) then (Sí)
+
+      :Proceder a entrega\n(continuar flujo de entrega);
+      stop
+
+    else (No retira)
+
+      ' ── 2do recordatorio + aviso formal ──────────────────
+
+      :Enviar 2do recordatorio formal\n**Día 7**\n"AVISO IMPORTANTE: Tu dispositivo lleva [N] días\nen nuestras instalaciones.\n\nA partir del **Día 15** se aplicará un cargo\ndiario por almacenaje de $[monto].\n\nA partir del **Día 30** el dispositivo será\nconsiderado en abandono y se procederá\nconforme a nuestra política interna.\n\nCoordina tu retiro a la brevedad.";
+
+      :Registrar aviso formal\ncomo notificación de tipo\n**AVISO_LEGAL** en el historial de la orden;
+
+      if (¿Cliente retira el dispositivo\nentre Día 7 y Día 15?) then (Sí)
+
+        :Proceder a entrega\n(continuar flujo de entrega);
+        stop
+
+      else (No retira)
+
+        ' ── Cobro por almacenaje ──────────────────────────
+
+        partition "Día 15 — Inicio de Cobro por Almacenaje" {
+
+          :Actualizar estado de orden\n**→ COBRO_ALMACENAJE**;
+          :Notificar al cliente\n"A partir de hoy se aplica cargo por almacenaje:\n$[monto] por [día/semana].\n\nMonto acumulado actual: $[total].\nTe recomendamos retirar a la brevedad.";
+          :Registrar cargo por almacenaje\nincremental en la orden;
+
+          note right
+            El cobro se acumula
+            automáticamente hasta
+            que el cliente retire
+            o se declare abandono.
+          end note
+        }
+
+        if (¿Cliente retira el dispositivo\nantes del Día 30?) then (Sí)
+
+          :Calcular total acumulado\npor almacenaje;
+          :Notificar al cliente nuevo\ntotal a pagar (reparación + almacenaje);
+          :Proceder a entrega\n(continuar flujo de entrega);
+          stop
+
+        else (No retira — Día 30)
+
+          ' ── Abandono ────────────────────────────────────
+
+          partition "Día 30 — Dispositivo en Abandono" {
+
+            :Actualizar estado de orden\n**→ DISPOSITIVO_ABANDONADO**;
+
+            :Registrar fecha y hora exacta\nde declaración de abandono;
+
+            :Enviar notificación final\n"Tu dispositivo ha sido declarado en abandono\ncomo se informó en el aviso del Día 7.\n\nEn [X días] procederemos conforme a\nnuestra política interna.\n\nSi aún deseas recuperarlo contactanos\nantes de [fecha límite final].";
+
+            note right
+              El negocio define su
+              política de disposición:
+              donación, venta, descarte.
+              Debe quedar documentado
+              en los términos firmados
+              en la recepción.
+            end note
+
+            if (¿Cliente contacta\nantes del plazo final?) then (Sí)
+
+              :Evaluar caso de forma\nmanual y excepcional\n(decisión del negocio);
+
+              if (¿Negocio acepta\nentregar aún?) then (Sí)
+                :Calcular total acumulado\n(reparación + almacenaje + recargo por abandono);
+                :Proceder a entrega\n(continuar flujo de entrega);
+                stop
+              else (No)
+                :Notificar al cliente\ndecisión final del negocio;
+                :Dispositivo permanece\nen estado **ABANDONADO**;
+                stop
+              endif
+
+            else (No contacta)
+
+              :Ejecutar política de\ndisposición del dispositivo\n(donación / descarte / venta interna);
+              :Registrar acción tomada\ncon fecha, responsable\ny descripción;
+              :Cerrar orden como\n**CERRADO_POR_ABANDONO**;
+              stop
+
+            endif
+
+          }
+
+        endif
+
+      endif
+
+    endif
+
+  endif
+
+}
+
+@enduml

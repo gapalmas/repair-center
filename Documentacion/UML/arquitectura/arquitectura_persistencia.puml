@@ -1,0 +1,459 @@
+@startuml arquitectura_persistencia
+!theme plain
+title Capa de Persistencia — Abstracción Dual\n(PostgreSQL + EF Core  /  MongoDB + MongoDB.Driver)
+
+skinparam ClassBackgroundColor #F8FBFF
+skinparam ClassBorderColor #3A5FCD
+skinparam ClassHeaderBackgroundColor #3A5FCD
+skinparam ClassHeaderFontColor #FFFFFF
+skinparam ClassFontSize 11
+skinparam ArrowColor #3A5FCD
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+skinparam linetype ortho
+skinparam groupInheritance 2
+
+' ══════════════════════════════════════════════════════════════
+' CONTRATOS — Application Layer (nunca cambian)
+' ══════════════════════════════════════════════════════════════
+
+package "Application Layer — Contratos (puertos)" as contracts #D0FFE8 {
+
+  interface "IRepository<T>" as IRepository {
+    + GetByIdAsync(id: Guid) : Task<T?>
+    + GetAllAsync() : Task<IList<T>>
+    + FindAsync(predicate: Expression<Func<T,bool>>) : Task<IList<T>>
+    + FindOneAsync(predicate: Expression<Func<T,bool>>) : Task<T?>
+    + AddAsync(entity: T) : Task
+    + UpdateAsync(entity: T) : Task
+    + DeleteAsync(id: Guid) : Task
+    + ExistsAsync(predicate: Expression<Func<T,bool>>) : Task<bool>
+    + CountAsync(predicate: Expression<Func<T,bool>>) : Task<int>
+  }
+
+  interface "IUnitOfWork" as IUnitOfWork {
+    + BeginTransactionAsync() : Task
+    + CommitAsync() : Task
+    + RollbackAsync() : Task
+    + DisposeAsync() : ValueTask
+  }
+
+  interface "IDbContext" as IDbContext {
+    + BeginTransactionAsync() : Task<IUnitOfWork>
+  }
+
+  note top of IRepository
+    Vive en Application Layer.
+    Los Use Cases / Services
+    solo conocen esta interface.
+    Nunca importan EF Core
+    ni MongoDB.Driver.
+  end note
+
+  ' ─── Repositorios específicos por entidad ────────────────
+
+  ' ─── Interfaces de solo lectura (Dapper) ──────────────────
+
+  interface "IReadRepository<T>" as IReadRepo {
+    + QueryAsync<TResult>(sql: string, param: object?) : Task<IEnumerable<TResult>>
+    + QueryFirstOrDefaultAsync<TResult>(sql: string, param: object?) : Task<TResult?>
+    + QuerySingleAsync<TResult>(sql: string, param: object?) : Task<TResult?>
+    + ExecuteScalarAsync<TResult>(sql: string, param: object?) : Task<TResult>
+  }
+
+  note top of IReadRepo
+    Dapper para lecturas.
+    SQL puro = máximo rendimiento
+    en queries complejas, reportes
+    y dashboards. No afecta el
+    change tracking de EF Core.
+  end note
+
+  interface "IOrdenReadRepository" as IOrdenReadRepo {
+    + GetDashboardResumenAsync(tenantId: Guid) : Task<DashboardResumenDto>
+    + GetOrdenesPaginadasAsync(filtro: OrdenFiltro) : Task<PagedResult<OrdenListDto>>
+    + GetReportePorPeriodoAsync(desde: DateTime, hasta: DateTime) : Task<IList<ReporteOrdenDto>>
+    + GetOrdenesVencidasCustodiaAsync(umbralDias: int) : Task<IList<OrdenCustodiaDto>>
+  }
+
+  interface "IReporteReadRepository" as IReporteReadRepo {
+    + GetIngresosPorMesAsync(anio: int) : Task<IList<IngresoMensualDto>>
+    + GetTopTecnicosAsync(top: int) : Task<IList<TecnicoRendimientoDto>>
+    + GetTiempoPromedioReparacionAsync() : Task<decimal>
+    + GetDispositivosMasReparadosAsync(top: int) : Task<IList<DispositivoFrecuenteDto>>
+  }
+
+  ' ─── Repositorios específicos por entidad (escritura) ─────
+
+  interface "IOrdenRepository" as IOrdenRepo {
+    + GetByTicketAsync(ticket: string) : Task<OrdenReparacion?>
+    + GetByEstadoAsync(estado: EstadoOrden) : Task<IList<OrdenReparacion>>
+    + GetByTenantAndClienteAsync(clienteId: Guid) : Task<IList<OrdenReparacion>>
+    + GetOrdenesVencidasCustodiaAsync(umbralDias: int) : Task<IList<OrdenReparacion>>
+  }
+
+  interface "IClienteRepository" as IClienteRepo {
+    + GetByTelefonoAsync(telefono: string) : Task<Cliente?>
+    + SearchAsync(term: string) : Task<IList<Cliente>>
+  }
+
+  interface "IInventarioRepository" as IInventarioRepo {
+    + GetByCodigoAsync(codigo: string) : Task<Repuesto?>
+    + GetStockBajoMinimoAsync() : Task<IList<Repuesto>>
+    + DescontarStockAsync(repuestoId: Guid, cantidad: int) : Task
+  }
+
+  IOrdenRepo        --|> IRepository   : T = OrdenReparacion
+  IClienteRepo      --|> IRepository   : T = Cliente
+  IInventarioRepo   --|> IRepository   : T = Repuesto
+  IOrdenReadRepo    --|> IReadRepo     : T = OrdenReparacion
+  IReporteReadRepo  --|> IReadRepo     : T = (DTOs)
+}
+
+' ══════════════════════════════════════════════════════════════
+' IMPLEMENTACIÓN EF CORE — PostgreSQL
+' ══════════════════════════════════════════════════════════════
+
+package "Infrastructure.Persistence.EfCore\n(PostgreSQL + EF Core + Npgsql)" as efcore #D0E8FF {
+
+  class "AppDbContext" as AppDbContext {
+    - _tenantContext : ITenantContext
+    ----
+    + Ordenes : DbSet<OrdenReparacion>
+    + Clientes : DbSet<Cliente>
+    + Dispositivos : DbSet<Dispositivo>
+    + Tecnicos : DbSet<Tecnico>
+    + Repuestos : DbSet<Repuesto>
+    + Tenants : DbSet<Tenant>
+    ----
+    # OnModelCreating(builder) : void
+    ' Aplica Global Query Filters por TenantId
+    ' Configura columnas jsonb (HasColumnType)
+    ' Configura índices GIN en jsonb
+  }
+
+  class "EfRepository<T>" as EfRepo {
+    - _context : AppDbContext
+    - _dbSet : DbSet<T>
+    ----
+    + GetByIdAsync(id) : Task<T?>
+    + GetAllAsync() : Task<IList<T>>
+    + FindAsync(predicate) : Task<IList<T>>
+    + AddAsync(entity) : Task
+    + UpdateAsync(entity) : Task
+    + DeleteAsync(id) : Task
+    ' TenantId ya filtrado por Global Query Filter
+    ' No hay riesgo de cross-tenant data leak
+  }
+
+  class "EfUnitOfWork" as EfUoW {
+    - _context : AppDbContext
+    - _transaction : IDbContextTransaction?
+    ----
+    + BeginTransactionAsync() : Task
+    + CommitAsync() : Task
+    + RollbackAsync() : Task
+    + DisposeAsync() : ValueTask
+    ' Wrappea SaveChangesAsync()
+    ' y las transacciones de EF Core
+  }
+
+  class "EfOrdenRepository" as EfOrdenRepo {
+    + GetByTicketAsync(ticket) : Task<OrdenReparacion?>
+    + GetByEstadoAsync(estado) : Task<IList<OrdenReparacion>>
+    + GetOrdenesVencidasCustodiaAsync(dias) : Task<IList<OrdenReparacion>>
+    ' Queries con LINQ + EF Core
+    ' Para escritura y consultas simples
+  }
+
+  ' ─── Dapper (lecturas complejas / reportes) ──────────────
+
+  class "DapperConnectionFactory" as DapperConnFactory {
+    - _connectionString : string
+    ----
+    + CreateConnection() : NpgsqlConnection
+    ' Misma connection string que EF Core
+    ' Crea NpgsqlConnection bajo demanda
+    ' No interfiere con AppDbContext
+    ' ni con el change tracker de EF Core
+  }
+
+  class "DapperReadRepository<T>" as DapperReadRepo {
+    - _connFactory : DapperConnectionFactory
+    - _tenantContext : ITenantContext
+    ----
+    + QueryAsync<TResult>(sql, param) : Task<IEnumerable<TResult>>
+    + QueryFirstOrDefaultAsync<TResult>(sql, param) : Task<TResult?>
+    + QuerySingleAsync<TResult>(sql, param) : Task<TResult?>
+    + ExecuteScalarAsync<TResult>(sql, param) : Task<TResult>
+    ----
+    ' SIEMPRE inyecta WHERE TenantId = @TenantId
+    ' SQL puro = máximo rendimiento
+    ' Ideal para dashboards y reportes
+  }
+
+  class "DapperOrdenReadRepository" as DapperOrdenReadRepo {
+    + GetDashboardResumenAsync(tenantId) : Task<DashboardResumenDto>
+    + GetOrdenesPaginadasAsync(filtro) : Task<PagedResult<OrdenListDto>>
+    + GetReportePorPeriodoAsync(desde, hasta) : Task<IList<ReporteOrdenDto>>
+    + GetOrdenesVencidasCustodiaAsync(dias) : Task<IList<OrdenCustodiaDto>>
+    ' SQL con JOINs, CTEs, window functions
+    ' Retorna DTOs planos (no entidades)
+  }
+
+  class "DapperReporteReadRepository" as DapperReporteReadRepo {
+    + GetIngresosPorMesAsync(anio) : Task<IList<IngresoMensualDto>>
+    + GetTopTecnicosAsync(top) : Task<IList<TecnicoRendimientoDto>>
+    + GetTiempoPromedioReparacionAsync() : Task<decimal>
+    + GetDispositivosMasReparadosAsync(top) : Task<IList<DispositivoFrecuenteDto>>
+    ' Queries analíticas con GROUP BY,
+    ' AVG, COUNT, CTEs recursivos, etc.
+  }
+
+  note bottom of DapperConnFactory
+    Estrategia CQRS simplificado:
+    ──────────────────────────────
+    ESCRITURAS → EF Core (DbContext)
+      • Change tracking
+      • Migraciones
+      • Global Query Filters
+      • Transacciones (UoW)
+
+    LECTURAS → Dapper (SQL puro)
+      • Máximo rendimiento
+      • JOINs complejos
+      • Reportes / dashboards
+      • Retorna DTOs, no entidades
+  end note
+
+  AppDbContext          --* EfRepo              : contiene DbSet<T>
+  AppDbContext          --* EfUoW               : gestiona transacciones
+  DapperConnFactory     --* DapperReadRepo      : provee NpgsqlConnection
+  EfRepo                ..|> IRepository
+  EfUoW                 ..|> IUnitOfWork
+  DapperReadRepo        ..|> IReadRepo
+  EfOrdenRepo           --|> EfRepo             : T = OrdenReparacion
+  EfOrdenRepo           ..|> IOrdenRepo
+  DapperOrdenReadRepo   --|> DapperReadRepo     : T = OrdenReparacion
+  DapperOrdenReadRepo   ..|> IOrdenReadRepo
+  DapperReporteReadRepo --|> DapperReadRepo     : T = (DTOs)
+  DapperReporteReadRepo ..|> IReporteReadRepo
+}
+
+' ══════════════════════════════════════════════════════════════
+' IMPLEMENTACIÓN MONGODB
+' ══════════════════════════════════════════════════════════════
+
+package "Infrastructure.Persistence.MongoDb\n(MongoDB.Driver — sin EF Core)" as mongoinfra #FFF0C0 {
+
+  class "MongoDbContext" as MongoCtx {
+    - _database : IMongoDatabase
+    ----
+    + GetCollection<T>(name: string) : IMongoCollection<T>
+    + StartSessionAsync() : Task<IClientSessionHandle>
+    ----
+    ' Configurado desde MongoDbSettings
+    ' (connection string, db name)
+    ' Inyectado vía DI como singleton
+  }
+
+  note top of MongoCtx
+    EF Core NO se usa aquí.
+    Se usa MongoDB.Driver directamente.
+    IMongoDatabase es el equivalente
+    al DbContext para MongoDB.
+  end note
+
+  class "MongoRepository<T>" as MongoRepo {
+    - _collection : IMongoCollection<T>
+    - _tenantContext : ITenantContext
+    ----
+    + GetByIdAsync(id) : Task<T?>
+    + GetAllAsync() : Task<IList<T>>
+    + FindAsync(predicate) : Task<IList<T>>
+    + AddAsync(entity) : Task
+    + UpdateAsync(entity) : Task
+    + DeleteAsync(id) : Task
+    ----
+    ' IMPORTANTE: TenantId NO tiene
+    ' Global Query Filter automático.
+    ' Cada método añade el filtro
+    ' manualmente:
+    ' filter &= Builders<T>.Filter
+    '           .Eq("TenantId", _tenantId)
+  }
+
+  class "MongoUnitOfWork" as MongoUoW {
+    - _session : IClientSessionHandle
+    ----
+    + BeginTransactionAsync() : Task
+    + CommitAsync() : Task
+    + RollbackAsync() : Task
+    + DisposeAsync() : ValueTask
+    ' Usa IClientSessionHandle para
+    ' transacciones multi-documento
+    ' (requiere MongoDB 4.0+ + ReplicaSet)
+  }
+
+  class "MongoOrdenRepository" as MongoOrdenRepo {
+    + GetByTicketAsync(ticket) : Task<OrdenReparacion?>
+    + GetByEstadoAsync(estado) : Task<IList<OrdenReparacion>>
+    + GetOrdenesVencidasCustodiaAsync(dias) : Task<IList<OrdenReparacion>>
+    ' Usa FilterDefinitionBuilder<T>
+    ' Puede aprovechar la estructura
+    ' de documentos embebidos
+  }
+
+  MongoCtx      --* MongoRepo    : provee IMongoCollection<T>
+  MongoCtx      --* MongoUoW     : provee IClientSessionHandle
+  MongoRepo     ..|> IRepository
+  MongoUoW      ..|> IUnitOfWork
+  MongoOrdenRepo --|> MongoRepo  : T = OrdenReparacion
+  MongoOrdenRepo ..|> IOrdenRepo
+}
+
+' ══════════════════════════════════════════════════════════════
+' SERVICE LAYER — Reemplaza MediatR
+' ══════════════════════════════════════════════════════════════
+
+package "Application Layer — Service Layer\n(Reemplaza MediatR + sin dependencias externas)" as servicelayer #F0FFE8 {
+
+  interface "IOrdenService" as IOrdenSvc {
+    + CrearOrdenAsync(request: CrearOrdenRequest) : Task<OrdenDto>
+    + AsignarTecnicoAsync(ordenId: Guid, tecnicoId: Guid) : Task
+    + AprobarCotizacionAsync(ordenId: Guid) : Task
+    + RechazarCotizacionAsync(ordenId: Guid) : Task
+    + IniciarReparacionAsync(ordenId: Guid) : Task
+    + CompletarReparacionAsync(request: CompletarReparacionRequest) : Task
+    + GenerarEntregaAsync(ordenId: Guid) : Task<EntregaDto>
+    + ObtenerPorTicketAsync(ticket: string) : Task<OrdenDto?>
+    + ListarPorEstadoAsync(estado: EstadoOrden) : Task<IList<OrdenDto>>
+  }
+
+  interface "IServiceFactory" as IServiceFactory {
+    + Ordenes : IOrdenService
+    + Clientes : IClienteService
+    + Diagnostico : IDiagnosticoService
+    + Reparaciones : IReparacionService
+    + Entregas : IEntregaService
+    + Garantias : IGarantiaService
+    + Inventario : IInventarioService
+    + Notificaciones : INotificacionService
+    + Reportes : IReporteService
+  }
+
+  class "ServiceFactory" as ServiceFactory {
+    - _serviceProvider : IServiceProvider
+    ----
+    + Ordenes : IOrdenService
+    + Clientes : IClienteService
+    + Diagnostico : IDiagnosticoService
+    ' ... resuelve cada servicio
+    ' desde el DI container de .NET
+    ' solo cuando se accede (lazy)
+  }
+
+  class "OrdenService" as OrdenService {
+    - _ordenRepo : IOrdenRepository
+    - _ordenReadRepo : IOrdenReadRepository
+    - _clienteRepo : IClienteRepository
+    - _uow : IUnitOfWork
+    - _notif : INotificacionService
+    - _tenantCtx : ITenantContext
+    ----
+    + CrearOrdenAsync(...) : Task<OrdenDto>
+    + AprobarCotizacionAsync(...) : Task
+    + ObtenerDashboardAsync() : Task<DashboardResumenDto>
+    ' Escrituras → IOrdenRepository (EF Core)
+    ' Lecturas  → IOrdenReadRepository (Dapper)
+    ' Mapea con Mapster (MIT — gratuito)
+  }
+
+  note right of IServiceFactory
+    El ServiceFactory es la única
+    entrada al dominio desde los
+    Controllers. Un Controller
+    solo recibe IServiceFactory
+    y nunca accede directamente
+    a repositorios.
+  end note
+
+  note right of OrdenService
+    Mapping strategy (sin AutoMapper):
+    ─────────────────────────────────
+    Opción A (recomendada):
+      Mapster — MIT, gratuito,
+      más rápido que AutoMapper.
+      TypeAdapterConfig para mappings
+      complejos.
+
+    Opción B (sin librerías):
+      Extension methods estáticos:
+      entity.ToDto()
+      request.ToEntity(tenantId)
+      Simple, predecible, testeable.
+  end note
+
+  ServiceFactory   ..|> IServiceFactory
+  OrdenService     ..|> IOrdenSvc
+  ServiceFactory   --* OrdenService : resuelve desde DI
+}
+
+' ══════════════════════════════════════════════════════════════
+' REGISTRO EN DI — Cómo se intercambia la implementación
+' ══════════════════════════════════════════════════════════════
+
+package "Program.cs — Registro de Dependencias\n(La única decisión de qué DB usar)" as diregistration #F5F0FF {
+
+  class "PersistenceServiceExtensions" as DI {
+    + AddPostgresPersistence(services, config) : IServiceCollection
+    ' Registra: AppDbContext, EfRepository<T>,
+    '           EfUnitOfWork, EfOrdenRepository,
+    '           DapperConnectionFactory,
+    '           DapperOrdenReadRepository,
+    '           DapperReporteReadRepository...
+    '
+    + AddMongoPersistence(services, config) : IServiceCollection
+    ' Registra: MongoDbContext, MongoRepository<T>,
+    '           MongoUnitOfWork, MongoOrdenRepository...
+    '           (Dapper NO aplica aquí — solo PostgreSQL)
+    '
+    ' Los Services y Controllers NO cambian.
+    ' Solo se cambia cuál extension se llama.
+  }
+
+  note right of DI
+    Para cambiar de PostgreSQL a MongoDB
+    se cambia UNA línea en Program.cs:
+
+    // PostgreSQL (EF Core + Dapper):
+    builder.Services.AddPostgresPersistence(config);
+
+    // MongoDB:
+    builder.Services.AddMongoPersistence(config);
+
+    En PostgreSQL, Dapper se registra
+    automáticamente para lecturas complejas.
+    Los Services usan IReadRepository<T>
+    para queries y IRepository<T> para escrituras.
+  end note
+}
+
+' ══════════════════════════════════════════════════════════════
+' RELACIONES ENTRE CAPAS
+' ══════════════════════════════════════════════════════════════
+
+OrdenService    ..> IOrdenRepo      : escribe →
+OrdenService    ..> IOrdenReadRepo  : lee (Dapper) →
+OrdenService    ..> IUnitOfWork     : transacciona →
+ServiceFactory  ..> IOrdenSvc      : expone →
+
+DI ..> EfRepo              : registra como IRepository<T>
+DI ..> DapperReadRepo       : registra como IReadRepository<T>
+DI ..> DapperOrdenReadRepo  : registra como IOrdenReadRepository
+DI ..> DapperReporteReadRepo  : registra como IReporteReadRepository
+DI ..> MongoRepo            : o registra como IRepository<T>
+DI ..> EfUoW                : registra como IUnitOfWork
+DI ..> MongoUoW             : o registra como IUnitOfWork
+
+@enduml

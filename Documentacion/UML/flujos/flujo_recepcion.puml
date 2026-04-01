@@ -1,0 +1,55 @@
+@startuml flujo_recepcion
+!theme plain
+title Flujo de Recepción — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+
+start
+
+:Cliente llega al taller;
+
+if (¿Cliente registrado?) then (Sí)
+  :Buscar cliente\npor teléfono / nombre;
+else (No)
+  :Registrar nuevo cliente\n• Nombre completo\n• Teléfono\n• Email (opcional);
+endif
+
+:Registrar dispositivo\n• Tipo (Celular / PC / Videojuego / Otro)\n• Marca / Modelo / Color\n• Número de serie (opcional)\n• Accesorios que acompañan;
+
+note right
+  Todo accesorio que ingresa
+  debe quedar registrado para
+  evitar conflictos en la entrega
+end note
+
+:Documentar estado físico del dispositivo\n—————————————————\nChecklist:\n  □ Pantalla: intacta / rayada / rota\n  □ Carcasa: intacta / golpes / rajada\n  □ Puertos: estado visible\n  □ Botones: operativos / dañados;
+
+:Capturar evidencia fotográfica\n(mínimo 1 foto del estado actual);
+
+note right
+  Protege al negocio ante
+  disputas post-reparación
+end note
+
+:Registrar falla reportada\npor el cliente\n(en sus propias palabras);
+
+:Registrar observación inicial\ndel técnico al recibir;
+
+:Generar Orden de Reparación\n• Número de ticket único (ej: REP-2026-0042)\n• Fecha y hora de ingreso\n• Técnico asignado (o sin asignar)\n• Prioridad: Normal / Urgente / Express\n• Fecha estimada de entrega\n• Costo estimado (opcional);
+
+fork
+  :Imprimir comprobante físico\no enviar comprobante digital\n(con QR de seguimiento);
+fork again
+  :Enviar notificación automática\nal cliente vía WhatsApp / SMS / Email\n"Tu ticket es REP-2026-0042.\nTe avisaremos cada cambio de estado.";
+end fork
+
+:Dispositivo ingresa al área de taller\n(Estado: RECIBIDO);
+
+stop
+
+@enduml

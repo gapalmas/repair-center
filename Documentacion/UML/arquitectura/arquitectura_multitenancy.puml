@@ -1,0 +1,148 @@
+@startuml arquitectura_multitenancy
+!theme plain
+title Estrategia Multi-Tenant — Centro de Reparación\n(Shared DB + TenantId + Visión ERP)
+
+skinparam rectangleBorderColor #3A5FCD
+skinparam rectangleBackgroundColor #F8FBFF
+skinparam ArrowColor #3A5FCD
+skinparam ArrowFontSize 10
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+' ══════════════════════════════════════════════════════════════
+' TENANTS (Empresas cliente del sistema)
+' ══════════════════════════════════════════════════════════════
+
+package "Empresas (Tenants)" as tenants #EEF4FF {
+
+  rectangle "**Tenant A**\n—————————\nElectrónica Don Pedro\nTenant ID: tenant-001\nCiudad: Guatemala\nPlan: Básico" as tenantA #D0E0FF
+
+  rectangle "**Tenant B**\n—————————\nTaller Motos El Tigre\nTenant ID: tenant-002\nCiudad: Quetzaltenango\nPlan: Profesional" as tenantB #D0E0FF
+
+  rectangle "**Tenant C**\n—————————\nServitec Industrial\nTenant ID: tenant-003\nCiudad: Escuintla\nPlan: Empresarial" as tenantC #D0E0FF
+
+  rectangle "**Tenant N**\n—————————\n...\nCualquier empresa\ngestionada por el sistema" as tenantN #E8E8E8
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' CÓMO SE RESUELVE EL TENANT EN CADA REQUEST
+' ══════════════════════════════════════════════════════════════
+
+package "Resolución del Tenant por Request" as resolution #FFF8E8 {
+
+  rectangle "**TenantResolutionMiddleware**\n—————————\nEjecuta en cada HTTP Request\nAntes de llegar al Controller\n—————————\n1. Lee el JWT del Authorization header\n2. Extrae el claim: tenant_id\n3. Valida que el Tenant existe y está activo\n4. Inyecta ITenantContext en el DI Container\n   con el TenantId resuelto\n5. Todas las operaciones posteriores\n   quedan automáticamente aisladas\n   al Tenant del request" as tenantMiddleware #FFF0C0
+
+  rectangle "**ITenantContext**\n—————————\nInterface en Application Layer\n—————————\n+ TenantId : Guid\n+ TenantName : string\n+ Configuration : TenantConfig\n—————————\nDisponible en cualquier caso de uso,\nrepositorio o servicio vía inyección\nde dependencias" as tenantContext #FFF0C0
+
+  rectangle "**TenantConfiguration**\n—————————\nConfiguración por empresa\n(almacenada en BD)\n—————————\n• DiasGratisCustodia: int\n• DiasInicioRecordatorio: int\n• DiasAvisoFormal: int\n• DiasInicioCobro: int\n• DiasDeclaracionAbandono: int\n• MontoCargoPorDia: decimal\n• MonedaLocal: string\n• CobraServicioDiagnostico: bool\n• MontoDiagnostico: decimal\n• DiasGarantia: int\n• NombreNegocio: string\n• LogoUrl: string\n• PlantillasMensaje: jsonb" as tenantConfig #FFF0C0
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' ESTRATEGIA DE BASE DE DATOS
+' ══════════════════════════════════════════════════════════════
+
+package "PostgreSQL — Estrategia Shared DB" as dbstrategy #F0FFE8 {
+
+  rectangle "**Estrategia elegida:**\nShared Database + Shared Schema\n+ TenantId discriminator\n—————————\n✔ Más simple de implementar\n✔ Un solo deployment y migrations\n✔ Menor costo de infraestructura\n✔ Migrable a schema-per-tenant\n  o DB-per-tenant sin reescribir\n  el dominio\n—————————\n⚠ Requiere Global Query Filters\n  en CADA DbSet del contexto\n  para garantizar el aislamiento" as dbStrategy #C8F0C8
+
+  rectangle "**Global Query Filter (EF Core)**\n—————————\nEn AppDbContext:\n\npublic DbSet<OrdenReparacion> Ordenes\n\nmodelBuilder.Entity<OrdenReparacion>()\n  .HasQueryFilter(x =>\n    x.TenantId == _tenantContext.TenantId);\n—————————\nAplica automáticamente a TODAS\nlas consultas LINQ sin excepción.\nSin esta protección, un tenant\npodría ver datos de otro." as globalFilter #C8F0C8
+
+  rectangle "**Columnas jsonb — Casos de uso**\n—————————\n• Dispositivo.Caracteristicas jsonb\n  → atributos específicos por tipo\n  (ej: placa para vehículo,\n   IMEI para celular, modelo de motor)\n• BitacoraTecnica.Detalle jsonb\n  → pasos libres y anidados\n• OrdenReparacion.MetadatosExtra jsonb\n  → campos extendidos por tenant\n• TenantConfig.PlantillasMensaje jsonb\n  → mensajes personalizados por empresa\n—————————\nConsulta eficiente con índices GIN\nFácil migración a MongoDB\npor documento si se necesita" as jsonbColumns #C8F0C8
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' VISIÓN ERP — BOUNDED CONTEXTS
+' ══════════════════════════════════════════════════════════════
+
+package "Visión ERP — Bounded Contexts" as erpvision #F5F0FF {
+
+  rectangle "**① Reparación**\n(ACTUAL — Fase 1)\n—————————\n• Recepción\n• Diagnóstico\n• Cotización\n• Reparación\n• Custodia\n• Entrega\n• Garantía" as bcReparacion #D8D0FF
+
+  rectangle "**② Inventario**\n(Fase 2)\n—————————\n• Repuestos\n• Proveedores\n• Stock mínimo\n• Órdenes de compra" as bcInventario #E8E0FF
+
+  rectangle "**③ Facturación**\n(Fase 3)\n—————————\n• Comprobantes fiscales\n• Cuentas por cobrar\n• Reportes contables\n• Integración fiscal" as bcFacturacion #E8E0FF
+
+  rectangle "**④ RRHH / Técnicos**\n(Fase 4)\n—————————\n• Gestión de personal\n• Comisiones\n• Horarios\n• Desempeño técnico" as bcRRHH #E8E0FF
+
+  rectangle "**⑤ Reportes / BI**\n(Fase 5)\n—————————\n• Dashboard ejecutivo\n• Métricas por tenant\n• Tiempo de reparación\n• Rentabilidad por tipo" as bcBI #E8E0FF
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' PATHS DE ESCALABILIDAD
+' ══════════════════════════════════════════════════════════════
+
+package "Paths de Escalabilidad" as scalability #FFF0F0 {
+
+  rectangle "**Camino A — Single App (actual)**\n—————————\nUn solo proyecto .NET\nUna sola BD PostgreSQL\nTenantId en todas las tablas\nGlobal Query Filters" as pathA #FFE8E8
+
+  rectangle "**Camino B — Schema per Tenant**\n—————————\nCuando un tenant necesita\naislamiento físico mayor\nSin cambiar el código de dominio\nSolo cambiar la conexión del DbContext" as pathB #FFE8E8
+
+  rectangle "**Camino C — Microservicios**\n—————————\nCada Bounded Context = servicio independiente\nCada servicio puede usar su propia BD\n(PostgreSQL, MongoDB, Redis)\nLas columnas jsonb ya son documentos\ny migran directamente a MongoDB" as pathC #FFE8E8
+
+}
+
+' ══════════════════════════════════════════════════════════════
+' RELACIONES
+' ══════════════════════════════════════════════════════════════
+
+tenantA --> tenantMiddleware : Request HTTP\nJWT con tenant_id: tenant-001
+tenantB --> tenantMiddleware : Request HTTP\nJWT con tenant_id: tenant-002
+tenantC --> tenantMiddleware : Request HTTP\nJWT con tenant_id: tenant-003
+
+tenantMiddleware --> tenantContext : Inyecta TenantId\nresuelto en DI
+tenantMiddleware --> tenantConfig  : Lee configuración\ndel Tenant activo
+
+tenantContext --> globalFilter  : TenantId se aplica\nautomáticamente
+tenantConfig  --> bcReparacion  : Plazos y montos\nconfigurados por empresa
+
+bcReparacion --> bcInventario  : consume (repuestos)
+bcReparacion --> bcFacturacion : genera (cobros)
+bcReparacion --> bcRRHH        : usa (técnicos)
+bcReparacion --> bcBI          : alimenta (métricas)
+
+pathA --> pathB : escala cuando\nun tenant crece
+pathB --> pathC : escala cuando\nel producto crece
+
+note right of globalFilter
+  REGLA DE ORO:
+  Ningún repository ni query
+  puede ejecutarse sin que
+  el TenantId esté activo
+  en el contexto.
+
+  Los tests de integración deben
+  verificar explícitamente que
+  un tenant NO puede acceder
+  a datos de otro tenant.
+end note
+
+note right of bcReparacion
+  La Fase 1 establece los cimientos:
+  • Entidad Tenant/Empresa
+  • ITenantContext
+  • TenantResolutionMiddleware
+  • Global Query Filters
+  • TenantConfiguration con
+    todos los parámetros configurables
+
+  Esto hace que el resto de
+  módulos hereden el aislamiento
+  sin trabajo adicional.
+end note
+
+note bottom of jsonbColumns
+  Estrategia híbrida relacional + documento:
+  Lo que se filtra / indexa → columna tipada
+  Lo que es flexible / variable → jsonb
+  Ejemplo: OrdenReparacion tiene TenantId (columna),
+  Estado (columna), FechaIngreso (columna)
+  y Metadatos (jsonb) para campos custom por empresa.
+end note
+
+@enduml

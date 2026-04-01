@@ -1,0 +1,224 @@
+@startuml flujo_entrega_cobro
+!theme plain
+title Flujo de Entrega y Cobro Final — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+start
+
+:Cliente se presenta al taller para retirar su dispositivo;
+
+' ─── VERIFICACIÓN DE IDENTIDAD ────────────────────────────────
+
+partition "Verificación de Identidad" {
+
+  :Solicitar comprobante de recepción\n(ticket físico, digital o código QR);
+
+  if (¿El cliente presenta\ncomprobante válido?) then (Sí)
+    :Localizar orden en el sistema\npor número de ticket;
+  else (No tiene comprobante)
+    :Buscar orden por nombre\ny teléfono del cliente;
+    :Verificar datos adicionales\npara confirmar titularidad\n(marca, modelo, color del dispositivo);
+
+    note right
+      Sin comprobante el dispositivo
+      NO se entrega hasta confirmar
+      la identidad del titular.
+      Queda registrado en el historial
+      de la orden.
+    end note
+  endif
+
+  :Confirmar estado actual de la orden;
+}
+
+' ─── CÁLCULO DEL TOTAL ────────────────────────────────────────
+
+partition "Cálculo del Total a Cobrar" {
+
+  note right
+    El total varía según el origen:
+    • LISTO_PARA_ENTREGA → mano de obra + repuestos
+    • SIN_REPARACION / REPARACION_FALLIDA → $0 reparación
+    • CANCELADO_POR_CLIENTE → $0 o cargo de diagnóstico
+    • Todos → + almacenaje acumulado (si aplica)
+  end note
+
+  :Recuperar del sistema:\n• Costo de reparación (si aplica)\n• Costo de repuestos utilizados (si aplica)\n• Cargo por diagnóstico (según política y origen)\n• Cargo por almacenaje acumulado (si aplica);
+
+  :Calcular total consolidado\n= reparación + repuestos + diagnóstico + almacenaje;
+
+  if (¿El total a cobrar\nes mayor a $0?) then (Sí)
+
+    ' ─── COBRO ───────────────────────────────────────────────
+
+    partition "Procesamiento de Pago" {
+
+      :Presentar desglose de cobro al cliente\n• Mano de obra: $[monto]\n• Repuestos: $[monto]\n• Diagnóstico: $[monto]\n• Almacenaje ([N] días): $[monto]\n—————————————\n• **TOTAL: $[monto]**;
+
+      :Seleccionar método de pago\n• Efectivo\n• Tarjeta débito/crédito\n• Transferencia bancaria;
+
+      if (¿Pago procesado\nexitosamente?) then (Sí)
+        :Registrar pago en el sistema\n• Monto, método, fecha y hora\n• Referencia de transacción\n  (si aplica para transferencia/tarjeta);
+        :Generar comprobante de pago;
+      else (Fallo en el pago)
+        :Registrar intento fallido;
+        :Ofrecer método de pago alternativo;
+
+        if (¿Cliente puede pagar\npor otro método?) then (Sí)
+          :Reintento con nuevo\nmétodo de pago;
+          :Registrar pago exitoso;
+          :Generar comprobante de pago;
+        else (No puede pagar)
+          :Dispositivo permanece en custodia\nEl almacenaje continúa acumulando;
+          :Registrar intento de retiro\nfallido por falta de pago;
+          stop
+        endif
+      endif
+    }
+
+  else (Total = $0\nsin cargo)
+    :Registrar entrega sin cobro\n(motivo: reparación fallida o\npolítica de cortesía);
+  endif
+
+}
+
+' ─── VERIFICACIÓN DEL DISPOSITIVO ─────────────────────────────
+
+partition "Verificación Física del Dispositivo" {
+
+  :Recuperar del sistema el registro\nde accesorios ingresados en recepción;
+
+  :Presentar el dispositivo al cliente\njunto con todos sus accesorios registrados;
+
+  :Cliente verifica:\n• Es su dispositivo (marca, modelo, color, N° serie)\n• Todos los accesorios que ingresó están presentes\n• El estado físico coincide con lo documentado en recepción;
+
+  if (¿El cliente reporta\nalguna discrepancia?) then (Sí)
+
+    :Registrar la discrepancia reportada\n(descripción detallada);
+
+    note right
+      Las fotos de recepción y
+      la documentación de estado
+      físico son la evidencia
+      para resolver la disputa.
+    end note
+
+    :Contrastar con evidencia fotográfica\ny checklist registrado en recepción;
+
+    if (¿La discrepancia es\nresponsabilidad del taller?) then (Sí)
+      :Escalar a responsable del negocio\npara resolución del caso;
+      :Registrar incidente y\nacciones de resolución tomadas;
+      stop
+    else (No es responsabilidad\ndel taller)
+      :Mostrar evidencia al cliente\n(fotos + checklist de recepción)\npara aclarar la situación;
+      :Registrar el incidente\ny su resolución en la orden;
+    endif
+
+  else (Sin discrepancias)
+    :Continuar con la entrega;
+  endif
+
+}
+
+' ─── GARANTÍA ─────────────────────────────────────────────────
+
+partition "Emisión de Garantía (si aplica)" {
+
+  if (¿La orden tiene como origen\n**LISTO_PARA_ENTREGA**\n(reparación exitosa)?) then (Sí)
+
+    :Emitir documento de garantía\n• Número de orden vinculada\n• Falla reparada cubierta\n• Vigencia: [N días desde la entrega]\n• Condiciones de cobertura\n• Exclusiones explícitas;
+
+    note right
+      La garantía cubre ÚNICAMENTE
+      la misma falla reparada.
+      NO cubre:
+      • Daños nuevos por golpes
+      • Exposición a líquidos
+      • Desarmado por terceros
+      • Fallas distintas a la reparada
+    end note
+
+  else (No aplica garantía)
+    :Sin emisión de garantía\n(reparación no exitosa o no realizada);
+  endif
+
+}
+
+' ─── CONFORMIDAD Y CIERRE ─────────────────────────────────────
+
+partition "Conformidad y Cierre" {
+
+  :Cliente firma conformidad de entrega\n• Confirma recepción del dispositivo\n• Confirma accesorios recibidos\n• Acepta condiciones de garantía (si aplica)\n• Reconoce haber sido informado\n  del estado técnico actual;
+
+  :Actualizar estado de orden\n**→ ENTREGADO**\nRegistrar fecha y hora de entrega\ny nombre del técnico / receptor que entregó;
+
+  :Entregar al cliente:\n• Comprobante de pago (si hubo cobro)\n• Documento de garantía (si aplica)\n• Copia de la conformidad firmada;
+
+  :Notificación final al cliente\n"¡Tu dispositivo ha sido entregado!\nGracias por confiar en nosotros.\nFolio: [ticket] — [fecha]";
+
+  :Orden cerrada como **ENTREGADO**;
+}
+
+' ─── POST-ENTREGA: RECLAMO DE GARANTÍA ───────────────────────
+
+partition "Post-Entrega — Reclamo de Garantía" {
+
+  note
+    Este bloque se activa cuando el cliente
+    regresa al taller después de la entrega.
+  end note
+
+  if (¿El cliente regresa\ncon la misma falla\ndentro del período\nde garantía?) then (Sí)
+
+    :Verificar número de ticket\noriginal y vigencia de garantía;
+
+    if (¿La garantía está\naún vigente?) then (Sí)
+
+      if (¿La falla es la misma\nque fue reparada\noriginalmente?) then (Sí)
+
+        :Registrar reclamo de garantía\nvinculado a la orden original;
+
+        :Crear nueva orden de tipo **GARANTÍA**\n• Vinculada a la orden original [ticket]\n• Sin costo para el cliente\n• Técnico asignado preferiblemente\n  el mismo que realizó la reparación\n  original;
+
+        :Nueva orden re-entra al\n**Flujo de Reparación**\n(Estado: EN_REPARACIÓN directamente,\nsin pasar por diagnóstico ni cotización);
+
+        stop
+
+      else (La falla es diferente\no hay daño nuevo)
+
+        :Documentar que la falla\nno está cubierta por garantía\n(con descripción técnica del motivo);
+
+        :Informar al cliente que la nueva\nfalla no está cubierta por garantía\n(mostrar condiciones firmadas);
+
+        :Si el cliente desea, se puede\nabrir una nueva orden regular\n(flujo normal desde recepción);
+
+        stop
+
+      endif
+
+    else (Garantía vencida)
+
+      :Informar al cliente que\nel período de garantía expiró\n(mostrar fecha de vencimiento);
+
+      :Si el cliente desea, se puede\nabrir una nueva orden regular\n(flujo normal desde recepción);
+
+      stop
+
+    endif
+
+  else (No hay reclamo\nde garantía)
+    :Flujo finalizado;
+    stop
+  endif
+
+}
+
+@enduml

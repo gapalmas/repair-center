@@ -1,0 +1,162 @@
+@startuml flujo_diagnostico
+!theme plain
+title Flujo de Diagnóstico y Cotización — Sistema de Reparación
+
+skinparam ActivityBackgroundColor #F0F4FF
+skinparam ActivityBorderColor #3A5FCD
+skinparam ActivityDiamondBackgroundColor #FFF8DC
+skinparam ActivityDiamondBorderColor #DAA520
+skinparam ArrowColor #3A5FCD
+skinparam ActivityFontSize 13
+skinparam NoteBackgroundColor #FFFACD
+skinparam NoteBorderColor #DAA520
+
+start
+
+:Orden en estado: **RECIBIDO**\n(proviene del flujo de recepción);
+
+' ─── ASIGNACIÓN ───────────────────────────────────────────────
+
+partition "Asignación al Técnico" {
+
+  if (¿Técnico especialista\ndisponible para este\ntipo de dispositivo?) then (Sí)
+    :Asignar técnico especialista;
+  else (No)
+    :Asignar técnico general\no dejar en cola de espera;
+  endif
+
+  :Actualizar estado de orden\n**RECIBIDO → EN_DIAGNÓSTICO**;
+
+  :Notificar al cliente\n"Tu dispositivo está siendo diagnosticado.\nTe informaremos los resultados pronto.";
+}
+
+' ─── DIAGNÓSTICO ──────────────────────────────────────────────
+
+partition "Diagnóstico Técnico" {
+
+  :Técnico inspecciona el dispositivo;
+
+  :Documentar hallazgos técnicos\n• Tipo de falla: Hardware / Software / Ambos\n• Componentes afectados\n• Causa probable de la falla\n• Nivel de complejidad: Baja / Media / Alta;
+
+  note right
+    El diagnóstico queda
+    registrado y vinculado
+    a la orden. No se puede
+    eliminar, solo corregir
+    con una nueva entrada.
+  end note
+
+  if (¿El dispositivo\nes reparable?) then (Sí)
+
+    ' ─── COTIZACIÓN ───────────────────────────────────────────
+
+    partition "Generación de Cotización" {
+
+      :Calcular costo de mano de obra;
+
+      if (¿Requiere repuestos\nexternos?) then (Sí)
+        :Verificar disponibilidad\nde repuestos en stock\no con proveedor;
+
+        if (¿Repuesto\ndisponible?) then (Sí)
+          :Registrar costo y tiempo\nde obtención del repuesto;
+        else (No)
+          :Solicitar repuesto a proveedor\nRegistrar tiempo estimado de llegada;
+          :Notificar al cliente\n"Se requiere un repuesto.\nTiempo estimado: [X días].";
+        endif
+
+      else (No)
+        :Registrar solo\ncosto de mano de obra;
+      endif
+
+      :Generar cotización detallada\n• Descripción del trabajo\n• Costo de mano de obra\n• Costo de repuestos (si aplica)\n• Tiempo estimado de reparación\n• Validez de la cotización: [N días];
+
+      :Actualizar estado de orden\n**EN_DIAGNÓSTICO → ESPERANDO_APROBACIÓN**;
+
+      :Enviar cotización al cliente\nvía WhatsApp / SMS / Email;
+    }
+
+    ' ─── DECISIÓN DEL CLIENTE ─────────────────────────────────
+
+    partition "Respuesta del Cliente" {
+
+      if (¿Cliente responde\ndentro del plazo?) then (Sí)
+
+        if (¿Cliente aprueba\nla cotización?) then (Aprueba)
+
+          :Registrar aprobación del cliente\n(fecha y hora);
+          :Actualizar estado de orden\n**ESPERANDO_APROBACIÓN → EN_REPARACIÓN**;
+          :Notificar al cliente\n"¡Aprobado! Comenzamos la reparación.\nTe avisamos cuando esté listo.";
+
+          stop
+
+        else (No aprueba)
+
+          :Registrar rechazo del cliente;
+          :Actualizar estado de orden\n**ESPERANDO_APROBACIÓN → CANCELADO_POR_CLIENTE**;
+
+          if (¿Se cobra diagnóstico?) then (Sí)
+            :Generar cobro por\nservicio de diagnóstico;
+          else (No)
+            :Sin cargo al cliente;
+          endif
+
+          :Preparar dispositivo\npara devolución;
+          :Notificar al cliente para\ncoordínar retiro del dispositivo;
+
+          stop
+
+        endif
+
+      else (No responde)
+
+        :Enviar recordatorio automático\nal cliente\n(1er intento);
+
+        if (¿Responde al\nrecordatorio?) then (Sí)
+          :Volver a evaluar\naprobación del cliente;
+
+          note right
+            Re-entra al bloque
+            de decisión del cliente
+          end note
+
+          stop
+
+        else (No responde)
+
+          :Escalar a seguimiento manual\npor parte del negocio;
+          :Actualizar estado de orden\n**→ PENDIENTE_DE_CONTACTO**;
+          :Registrar intento de contacto\nfallido con fecha y hora;
+
+          stop
+
+        endif
+
+      endif
+
+    }
+
+  else (No es reparable)
+
+    ' ─── SIN REPARACIÓN ───────────────────────────────────────
+
+    partition "Sin Reparación Posible" {
+
+      :Documentar motivo técnico\npor el que no es reparable;
+      :Actualizar estado de orden\n**EN_DIAGNÓSTICO → SIN_REPARACION**;
+
+      if (¿Se cobra diagnóstico?) then (Sí)
+        :Generar cobro por\nservicio de diagnóstico;
+      else (No)
+        :Sin cargo al cliente;
+      endif
+
+      :Notificar al cliente\n"Lamentamos informarte que tu dispositivo\nno tiene reparación posible.\nMotivo: [descripción técnica].\nCoordina el retiro cuando gustes.";
+
+      :Preparar dispositivo\npara devolución;
+
+      stop
+    }
+
+  endif
+
+@enduml
