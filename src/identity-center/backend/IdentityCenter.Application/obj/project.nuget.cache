@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "zygxITk2DLI=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\gapalma\\Documents\\Prompts\\RepairModel\\src\\identity-center\\backend\\IdentityCenter.Application\\IdentityCenter.Application.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\gapalma\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.5\\microsoft.net.illink.tasks.10.0.5.nupkg.sha512",
+    "C:\\Users\\gapalma\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\10.0.5\\microsoft.netcore.app.runtime.win-x64.10.0.5.nupkg.sha512",
+    "C:\\Users\\gapalma\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\10.0.5\\microsoft.windowsdesktop.app.runtime.win-x64.10.0.5.nupkg.sha512",
+    "C:\\Users\\gapalma\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\10.0.5\\microsoft.aspnetcore.app.runtime.win-x64.10.0.5.nupkg.sha512"
+  ],
+  "logs": []
+}

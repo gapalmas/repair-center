@@ -1,0 +1,8 @@
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\appsettings.Development.json
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\appsettings.json
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\IdentityCenter.API.pdb
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\aspnetcorev2_inprocess.dll
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\IdentityCenter.Application.pdb
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\IdentityCenter.Infrastructure.pdb
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\IdentityCenter.Domain.pdb
+C:\Users\gapalma\AppData\Local\Temp\identitycenter-api-single\IdentityCenter.API.exe

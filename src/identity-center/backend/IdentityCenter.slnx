@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="IdentityCenter.Domain/IdentityCenter.Domain.csproj" />
+  <Project Path="IdentityCenter.Application/IdentityCenter.Application.csproj" />
+  <Project Path="IdentityCenter.Infrastructure/IdentityCenter.Infrastructure.csproj" />
+  <Project Path="IdentityCenter.API/IdentityCenter.API.csproj" />
+  <Project Path="IdentityCenter.Tests.Unit/IdentityCenter.Tests.Unit.csproj" />
+</Solution>

@@ -1,0 +1,17 @@
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Infrastructure.deps.json
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Infrastructure.dll
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Infrastructure.pdb
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Application.dll
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Domain.dll
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Application.pdb
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\bin\Release\net10.0\IdentityCenter.Domain.pdb
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.csproj.AssemblyReference.cache
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.AssemblyInfoInputs.cache
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.AssemblyInfo.cs
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.csproj.CoreCompileInputs.cache
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\Identity.701189C4.Up2Date
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.dll
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\refint\IdentityCenter.Infrastructure.dll
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\IdentityCenter.Infrastructure.pdb
+C:\Users\gapalma\Documents\Prompts\RepairModel\src\identity-center\backend\IdentityCenter.Infrastructure\obj\Release\net10.0\ref\IdentityCenter.Infrastructure.dll
