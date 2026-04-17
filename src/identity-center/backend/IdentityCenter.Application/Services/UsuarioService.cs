@@ -42,6 +42,11 @@ public sealed class UsuarioService
         var usuario = new Usuario(request.TenantId, request.Nombre, request.Apellido,
                                   request.Email, hash, request.RolId);
 
+        if (DebeForzarCambioPasswordInicial(rol.Nombre, request.Email))
+        {
+            usuario.MarcarCambioPasswordRequerido();
+        }
+
         await _repo.AddAsync(usuario, ct);
         await _uow.SaveChangesAsync(ct);
 
@@ -112,6 +117,12 @@ public sealed class UsuarioService
         usuario.Activar();
         _repo.Update(usuario);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    private static bool DebeForzarCambioPasswordInicial(string rolNombre, string email)
+    {
+        return rolNombre.Contains("admin", StringComparison.OrdinalIgnoreCase)
+            || email.Equals("admin@repairmodel.local", StringComparison.OrdinalIgnoreCase);
     }
 }
 
